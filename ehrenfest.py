@@ -137,7 +137,7 @@ FIELD_INFO = { "tdci_simulation_time": tdci_simulation_time,
 def xyz_write(atoms, coords, filename):
     f = open(filename,'w')
     f.write(str(len(atoms))+'\n\n')
-    for atom, coord in zip(atoms,coords):
+    for atom, coord in zip(atoms, coords):
         f.write(('{:>3s}'+'{:25.17f}'*3+'\n').format(atom, coord[0], coord[1], coord[2]))
     f.close()
 
@@ -186,7 +186,7 @@ def vecs_read(filename):
 # Accelerations
 ########################################
 
-def getaccs(tc, masses, xyzfilename):
+def getaccs(tc, atoms, masses, coords):
 
     # Print begin
     print("")
@@ -194,6 +194,12 @@ def getaccs(tc, masses, xyzfilename):
     print("##### ACCELERATIONS BEGIN #####")
     print("###############################")
     print("")
+
+    # Temprorary xyz filename
+    xyzfilename = "temp.xyz"
+
+    # Write xyz file
+    xyz_write(atoms, coords, xyzfilename)
 
     # Call TeraChem
     TCdata = tc.nextstep(xyzfilename)
@@ -222,7 +228,7 @@ def getaccs(tc, masses, xyzfilename):
 # Masses initialization
 ########################################
 
-def getmasses(geomfilename):
+def getmasses(atoms):
 
     # Mass data
     # Source: https://physics.nist.gov/cgi-bin/Compositions/stand_alone.pl
@@ -233,9 +239,6 @@ def getmasses(geomfilename):
     massdata['O'] = 15.99491461957
     massdata['S'] = 31.9720711744
     
-    # Get atoms only
-    atoms, _ = xyz_read(geomfilename)
-
     # Build nympy array of masses
     natoms = len(atoms)
     masses = np.empty([natoms])
@@ -248,24 +251,6 @@ def getmasses(geomfilename):
 
     # Return masses
     return masses
-
-########################################
-# Files initialization, iteration 0
-########################################
-
-def initgeomfile(xyzfilename, geomfilename):
-    shutil.copyfile(xyzfilename, geomfilename)
-
-def initvelsfile(xyzfilename, velfilename):
-    f = open(xyzfilename,'r')
-    natoms = int(f.readline())
-    f.close()
-    vels = np.zeros([natoms, 3])
-    vecs_write(vels, velfilename)
-
-def initaccsfile(xyzfilename, accfilename, tc, masses):
-    accs = getaccs(tc, masses, xyzfilename)
-    vecs_write(accs, accfilename)
 
 ########################################
 # Main function
@@ -292,25 +277,27 @@ print("Initializing tccontroller\n")
 tc = tccontroller.tccontroller(JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, False)
 
 # Geometry file name
-molname      = "ethylene"
-geomfilename = molname + ".xyz"
+geomfilename = "ethylene.xyz"
 print("Geometry file: " + geomfilename)
+
+# Read geometry file
+print("Reading geometry file")
+atoms, cs_curr = xyz_read(geomfilename)
 
 # Get masses
 print("Getting masses")
-masses = getmasses(geomfilename)
+masses = getmasses(atoms)
 
-# Iteration 0: geometry file
-print("Initializing geometry file")
-initgeomfile(geomfilename, molname + str(0).zfill(4) + ".xyz")
+# Convert coordinates from Angstroms to au
+xs_curr = cs_curr / bohrtoangs
 
-# Iteration 0: velocities file
-print("Initializing velocities file")
-initvelsfile(geomfilename, molname + str(0).zfill(4) + ".vel")
+# Initialize velocities
+print("Initializing velocities")
+vs_curr = np.zeros([len(atoms), 3])
 
-# Iteration 0: accelerations file
-print("Initializing accelerations file")
-initaccsfile(geomfilename, molname + str(0).zfill(4) + ".acc", tc, masses)
+# Initilize accelerations
+print("Initializing accelerations")
+as_curr = getaccs(tc, atoms, masses, cs_curr)
 
 # Get time step in au (from femtoseconds)
 delta = tdci_simulation_time * 1e-15 / autimetosec
@@ -319,67 +306,47 @@ print("Time step in au: " + str(delta))
 print("")
 
 # Main dynamics loop
-for it in range(0, 5):
+for it in range(0, 2):
 
     # Log iteration start
     print("Iteration " + str(it).zfill(4) + " started")
-
-    # Current filenames (to read from)
-    geomfilename_curr = JOBDIR + molname + str(it).zfill(4)   + ".xyz"
-    velsfilename_curr = JOBDIR + molname + str(it).zfill(4)   + ".vel"
-    accsfilename_curr = JOBDIR + molname + str(it).zfill(4)   + ".acc"
-
-    # Next filenames (to write to)
-    geomfilename_next = JOBDIR + molname + str(it+1).zfill(4) + ".xyz"
-    velsfilename_next = JOBDIR + molname + str(it+1).zfill(4) + ".vel"
-    accsfilename_next = JOBDIR + molname + str(it+1).zfill(4) + ".acc"
-
-    # Read current geometry
-    print("Reading current geometry")
-    atoms, cs_curr = xyz_read(geomfilename_curr)
-
-    # Read current velocities
-    print("Reading current velocities")
-    vs_curr = vecs_read(velsfilename_curr)
-
-    # Read current accelerations
-    print("Reading current accelerations")
-    as_curr = vecs_read(accsfilename_curr)
-
-    # Convert current coordinates from Angstroms to au
-    xs_curr = cs_curr / bohrtoangs
 
     # Calculate next geometry
     print("Calculating next geometry")
     xs_next = xs_curr + vs_curr * delta + as_curr * delta**2 / 2
 
-    # Convert current coordinates from au to Angstroms
+    # Convert coordinates from au to Angstroms
     cs_next = xs_next * bohrtoangs
-
-    # Write next geometry
-    print("Writing next geometry")
-    xyz_write(atoms, cs_next, geomfilename_next)
 
     # Calculate next accelerations
     print("Calculating next accelerations")
-    as_next = getaccs(tc, masses, geomfilename_next)
-
-    # Write next accelerations
-    print("Writing next accelerations")
-    vecs_write(as_next, accsfilename_next)
+    as_next = getaccs(tc, atoms, masses, cs_next)
 
     # Calculate next velocities
     print("Calculating next velocities")
     vs_next = vs_curr + (as_curr + as_next) * delta / 2
 
-    # Write next velocities
-    print("Writing next velocities")
-    vecs_write(vs_next, velsfilename_next)
+    # Update current
+    xs_curr = xs_next
+    vs_curr = vs_next
+    as_curr = as_next
 
     # Print results
     print("Iteration " + str(it).zfill(4) + " finished")
     print("")
     print("")
+
+# Write final geometry
+print("Writing final geometry")
+xyz_write(atoms, cs_next, "final.xyz")
+
+# Write final velocities
+print("Writing final velocities")
+vecs_write(vs_next, "final.vel")
+
+# Write final accelerations
+print("Writing final accelerations")
+vecs_write(as_next, "final.acc")
 
 print("Finished!")
 
