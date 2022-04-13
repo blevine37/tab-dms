@@ -6,6 +6,7 @@
 import tccontroller
 import numpy as np
 import shutil
+import h5py
 import sys
 
 ########################################
@@ -158,31 +159,6 @@ def xyz_read(filename):
     return (atoms, coords)
 
 ########################################
-# Vectors read and write
-########################################
-
-def vecs_write(vecs, filename):
-    f = open(filename,'w')
-    f.write(str(len(vecs))+'\n\n')
-    for vec in vecs:
-        f.write(('{:25.17f}'*3+'\n').format(vec[0], vec[1], vec[2]))
-    f.close()
-
-def vecs_read(filename):
-    f = open(filename,'r')
-    n = int(f.readline())
-    f.readline()
-    vecs = np.empty([n, 3])
-    for i in range(0, n):
-        fields = f.readline().split()
-        if len(fields) != 3: break
-        vecs[i][0] = float(fields[0])
-        vecs[i][1] = float(fields[1])
-        vecs[i][2] = float(fields[2])
-    f.close()
-    return vecs
-
-########################################
 # Accelerations
 ########################################
 
@@ -253,6 +229,55 @@ def getmasses(atoms):
     return masses
 
 ########################################
+# h5py
+########################################
+
+def h5py_update(geom, vels, accs):
+
+    # Get array dimension
+    n = geom.shape[0]
+
+    # Open h5py file
+    h5f = h5py.File('data.hdf5', 'a')
+
+    # Create datasets
+    if len(list(h5f.keys())) == 0 :
+        print('Creating datasets')
+        h5f.create_dataset('geom', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
+        h5f.create_dataset('vels', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
+        h5f.create_dataset('accs', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
+
+    # Resize
+    for key in h5f.keys():
+        dset = h5f[key]
+        dset.resize(dset.len() + 1, axis=0)
+
+    # Store data
+    h5f['geom'][-1] = geom
+    h5f['vels'][-1] = vels
+    h5f['accs'][-1] = accs
+
+    # Close
+    h5f.close()
+
+def h5py_printall():
+
+    # Open h5py file
+    h5f = h5py.File('data.hdf5', 'r')
+
+    # Iterate and print
+    for key in h5f.keys():
+        print(key)
+        for vecs in h5f[key]:
+            for vec in vecs:
+                print(('{:25.17f}'*3).format(vec[0], vec[1], vec[2]))
+            print("")
+
+    # Close
+    h5f.close()
+
+
+########################################
 # Main function
 # All calculations are in atomic units (au)
 # Source: https://en.wikipedia.org/wiki/Hartree_atomic_units
@@ -272,7 +297,7 @@ print("TDCI + TAB-DMS code")
 print("Ehrenfest version")
 print("")
 
-# TC controller initialization
+# Initialize TC controller
 print("Initializing tccontroller\n")
 tc = tccontroller.tccontroller(JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, False)
 
@@ -295,7 +320,7 @@ xs_curr = cs_curr / bohrtoangs
 print("Initializing velocities")
 vs_curr = np.zeros([len(atoms), 3])
 
-# Initilize accelerations
+# Initialize accelerations
 print("Initializing accelerations")
 as_curr = getaccs(tc, atoms, masses, cs_curr)
 
@@ -305,8 +330,13 @@ print("Time step in fs: " + str(tdci_simulation_time))
 print("Time step in au: " + str(delta))
 print("")
 
+# Store inital state in HDF5
+print("Storing intial state in HDF5")
+h5py_update(xs_curr, vs_curr, as_curr)
+print("")
+
 # Main dynamics loop
-for it in range(0, 2):
+for it in range(1, 2):
 
     # Log iteration start
     print("Iteration " + str(it).zfill(4) + " started")
@@ -315,16 +345,17 @@ for it in range(0, 2):
     print("Calculating next geometry")
     xs_next = xs_curr + vs_curr * delta + as_curr * delta**2 / 2
 
-    # Convert coordinates from au to Angstroms
-    cs_next = xs_next * bohrtoangs
-
     # Calculate next accelerations
     print("Calculating next accelerations")
-    as_next = getaccs(tc, atoms, masses, cs_next)
+    as_next = getaccs(tc, atoms, masses, xs_next * bohrtoangs)
 
     # Calculate next velocities
     print("Calculating next velocities")
     vs_next = vs_curr + (as_curr + as_next) * delta / 2
+
+    # Update HDF5
+    print("Updating HDF5")
+    h5py_update(xs_next, vs_next, as_next)
 
     # Update current
     xs_curr = xs_next
@@ -338,15 +369,19 @@ for it in range(0, 2):
 
 # Write final geometry
 print("Writing final geometry")
-xyz_write(atoms, cs_next, "final.xyz")
+xyz_write(atoms, xs_next * bohrtoangs, "final.xyz")
 
 # Write final velocities
 print("Writing final velocities")
-vecs_write(vs_next, "final.vel")
+xyz_write(atoms, vs_next, "final.vel")
 
 # Write final accelerations
 print("Writing final accelerations")
-vecs_write(as_next, "final.acc")
+xyz_write(atoms, as_next, "final.acc")
+
+# Print HDF5 contents
+print("Printing HDF5 contents")
+h5py_printall()
 
 print("Finished!")
 
