@@ -302,7 +302,7 @@ bohrtoangs = 0.529177210903
 autimetosec = 2.4188843265857e-17
 
 # Job directory
-JOBDIR = "/home/ateplukhin/jobs/ehrenfest/"
+JOBDIR = "./"
 
 # Print header
 print("TDCI + TAB-DMS code")
