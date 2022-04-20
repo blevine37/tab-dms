@@ -194,7 +194,7 @@ def getaccs(tc, atoms, masses, coords):
     print("")
 
     # Get forces (Hartree/Bohr)
-    forces = TCdata['grad']
+    forces = - TCdata['grad']
     print(forces)
 
     # Get accelerations
