@@ -7,11 +7,14 @@ import tccontroller
 import numpy as np
 import shutil
 import h5py
-import sys
+import os
 
 ########################################
 # Job Template
 ########################################
+
+if not os.path.exists("./templates"):
+    os.makedirs("./templates")
 
 TERACHEM = "/home/ateplukhin/Source/terachem/build/bin/" # terachem executable stored here
 # make sure you include temppath and tempname in your job template!
@@ -21,7 +24,7 @@ job_template_contents = "#!/bin/bash\n\
                          cd temppath\n\
                         "+TERACHEM+"terachem tempname.in > tempname.out\n"
 
-JOB_TEMPLATE = "/home/ateplukhin/Source/tccontroller/templates/template.job"
+JOB_TEMPLATE = "./templates/template.job"
 f = open(JOB_TEMPLATE,'w')
 f.write(job_template_contents)
 f.close()
@@ -95,7 +98,7 @@ if krylov_end:
   tdci_options["tdci_krylov_init"] = "yes"
   tdci_options["tdci_krylovmo_readfile"] = "cn_krylov_init.bin"
 
-TDCI_TEMPLATE = "/home/ateplukhin/Source/tccontroller/templates/tdci.in"
+TDCI_TEMPLATE = "./templates/tdci.in"
 tccontroller.dict_to_file(tdci_options, TDCI_TEMPLATE)
 
 ########################################
