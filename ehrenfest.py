@@ -5,9 +5,8 @@
 
 import tccontroller
 import numpy as np
-import shutil
+import shutil, os, subprocess, time
 import h5py
-import os
 
 ########################################
 # Job Template
@@ -174,15 +173,136 @@ def xyz_read(filename):
     return (atoms, coords)
 
 ########################################
-# Accelerations
+# TeraChem gradient-only calculation
+# Returns accelerations
 ########################################
 
-def getaccs(tc, atoms, masses, coords):
+# Note 1: Ideally this function must be a part of tccontroller, because
+#         tccontroller is responsible for interfacing with TeraChem.
+#         Solution A: the function could be moved almost as-is into tccontroller.
+#         Solution B: nextStep() method could allow propagation for 0 fs.
+#         Solution C: nextStep() method could provide an option to change the order of propagation and grad.
+#         In case of B and C, this function can be deleted.
+# Note 2: Since this is a plain gradient TC calculation, the gradient is
+#         returned as text. Ideally, we want it in binary form.
+#         Solution B or C will solve this issue, because nextStep() returns grad in binary
+#         Solution D: change TC source to output binary gradient, but this looks redundant,
+#         because nextStep() already returns grad in binary.
+
+def tc_grad(tc, atoms, masses, coords):
 
     # Print begin
     print("")
     print("###############################")
-    print("##### ACCELERATIONS BEGIN #####")
+    print("##### TERACHEM GRAD BEGIN #####")
+    print("###############################")
+    print("")
+
+    # Create directory
+    graddir = "./grad"
+    if not os.path.exists(graddir):
+        os.makedirs(graddir)
+
+    # Wrire job file
+    shutil.copy(JOB_TEMPLATE, graddir + "/grad.job")
+    tccontroller.search_replace_file(graddir + "/grad.job", "temppath", graddir)
+    tccontroller.search_replace_file(graddir + "/grad.job", "tempname", "grad")
+
+    # Write xyz file
+    xyz_write(atoms, coords, graddir + "/grad.xyz")
+
+    # Write TeraChem input file
+    terachem_input = {
+      "gpus"                 : "1 0",
+      "timings"              : "yes",
+      "precision"            : "double",
+      "threall"              : "1.0e-20",
+      "convthre"             : "1.0e-6",
+      "basis"                : "sto-3g",
+      "coordinates"          : "grad.xyz",
+      "method"               : "hf",
+      "run"                  : "gradient",
+      "charge"               : "0",
+      "spinmult"             : "1",
+      "csf_basis"            : "no",
+      ""                     : "",
+      "casci"                : "yes",
+      "ci_solver"            : "direct",
+      "dcimaxiter"           : "300",
+      "dciprintinfo"         : "yes",
+      "dcipreconditioner"    : "orbenergy",
+      ""                     : "",
+      "closed"               : "5",
+      "active"               : "6",
+      "cassinglets"          : "3",
+      "castriplets"          : "0",
+      "cascharges"           : "yes",
+      "cas_ntos"             : "yes",
+      ""                     : "",
+      "cassavevectors"       : "yes",
+      ""                     : "",
+      "casgradmult"          : "1 1 1",
+      "casgradstate"         : "0 1 2"
+    }
+    tccontroller.dict_to_file(terachem_input, graddir + "/grad.in")
+
+    # Start TeraChem
+    p = subprocess.Popen("bash " + graddir + "/grad.job", shell=True)
+
+    # Wait to finish
+    while True:
+        time.sleep(5)
+        if p.poll() == None:
+            print("Still running...\n")
+        else:
+            print("Done!\n")
+            break
+
+    # Get gradient
+    n = len(atoms)
+    grad = np.empty([n, 3])
+    f = open(graddir+"/grad.out",'r')
+    while not "Gradient units are Hartree/Bohr" in f.readline(): pass
+    print(f.readline())
+    print(f.readline())
+    for i in range(0, n):
+        fields = f.readline().split()
+        if len(fields) != 3: break
+        grad[i][0] = float(fields[0])
+        grad[i][1] = float(fields[1])
+        grad[i][2] = float(fields[2])
+    f.close()
+
+    # Get forces (Hartree/Bohr)
+    forces = - grad
+    print(forces)
+
+    # Get accelerations
+    accs = np.copy(forces)
+    for a, mass in zip(accs, masses):
+        a /= mass
+
+    # Print end
+    print("")
+    print("###############################")
+    print("###### TERACHEM GRAD END ######")
+    print("###############################")
+    print("")
+
+    # Return accelerations
+    return accs
+
+########################################
+# TeraChem propagation and gradient
+# Returns accelerations
+########################################
+
+def tc_prop_and_grad(tc, atoms, masses, coords):
+
+    # Print begin
+    print("")
+    print("###############################")
+    print("######## TERACHEM BEGIN #######")
     print("###############################")
     print("")
 
@@ -208,7 +328,7 @@ def getaccs(tc, atoms, masses, coords):
     # Print end
     print("")
     print("###############################")
-    print("###### ACCELERATIONS END ######")
+    print("######### TERACHEM END ########")
     print("###############################")
     print("")
 
@@ -337,7 +457,7 @@ vs_curr = np.zeros([len(atoms), 3])
 
 # Initialize accelerations
 print("Initializing accelerations")
-as_curr = getaccs(tc, atoms, masses, cs_curr)
+as_curr = tc_grad(tc, atoms, masses, cs_curr)
 
 # Get time step in au (from femtoseconds)
 delta = tdci_simulation_time * 1e-15 / autimetosec
@@ -362,7 +482,7 @@ for it in range(1, 2):
 
     # Calculate next accelerations
     print("Calculating next accelerations")
-    as_next = getaccs(tc, atoms, masses, xs_next * bohrtoangs)
+    as_next = tc_prop_and_grad(tc, atoms, masses, xs_next * bohrtoangs)
 
     # Calculate next velocities
     print("Calculating next velocities")
