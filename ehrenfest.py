@@ -459,10 +459,10 @@ vs_curr = np.zeros([len(atoms), 3])
 print("Initializing accelerations")
 as_curr = tc_grad(tc, atoms, masses, cs_curr)
 
-# Get time step in au (from femtoseconds)
-delta = tdci_simulation_time * 1e-15 / autimetosec
-print("Time step in fs: " + str(tdci_simulation_time))
-print("Time step in au: " + str(delta))
+# Time steps
+delta = 2 * tdci_simulation_time * 1e-15 / autimetosec
+print("TDCI simulation half time step in fs: " + str(tdci_simulation_time))
+print("Propagation time step in au: " + str(delta))
 print("")
 
 # Store inital state in HDF5
@@ -480,8 +480,12 @@ for it in range(1, 2):
     print("Calculating next geometry")
     xs_next = xs_curr + vs_curr * delta + as_curr * delta**2 / 2
 
-    # Calculate next accelerations
-    print("Calculating next accelerations")
+    # Propagate electronic wavefunction to half time step
+    print("Propagating electronic wavefunction to half time step using current coordinates")
+    tc_prop_and_grad(tc, atoms, masses, xs_curr * bohrtoangs)
+
+    # Propagate electronic wavefunction to half time step
+    print("Propagating electronic wavefunction to half time step using next coordinates")
     as_next = tc_prop_and_grad(tc, atoms, masses, xs_next * bohrtoangs)
 
     # Calculate next velocities
