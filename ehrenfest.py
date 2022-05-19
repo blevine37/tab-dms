@@ -483,7 +483,7 @@ h5py_update(xs_curr, vs_curr, as_curr)
 print("")
 
 # Main dynamics loop
-for it in range(1, 2):
+for it in range(1, 10000):
 
     # Log iteration start
     print("Iteration " + str(it).zfill(4) + " started")
