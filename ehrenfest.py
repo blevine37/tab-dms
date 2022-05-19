@@ -97,6 +97,9 @@ if krylov_end:
   tdci_options["tdci_krylov_init"] = "yes"
   tdci_options["tdci_krylovmo_readfile"] = "cn_krylov_init.bin"
 
+# Disable CI vector transformation from Krylov basis to determinant basis
+tdci_options["tdci_krylov_init"] = "no"
+
 TDCI_TEMPLATE = "./templates/tdci.in"
 tccontroller.dict_to_file(tdci_options, TDCI_TEMPLATE)
 
