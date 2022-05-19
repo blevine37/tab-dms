@@ -1,12 +1,16 @@
 ########################################
 # Ehrenfest code for TDCI
 # Python 2, because TCController uses it
+#
+# All calculations are in atomic units (au)
+# Source: https://en.wikipedia.org/wiki/Hartree_atomic_units
 ########################################
 
 import tccontroller
 import numpy as np
 import shutil, os, subprocess, time
 import h5py
+import math
 
 ########################################
 # Job Template
@@ -29,12 +33,29 @@ f.write(job_template_contents)
 f.close()
 
 ########################################
+# Times
+########################################
+
+# Atomic unit of time to seconds (s)
+autimetosec = 2.4188843265857e-17
+
+# Dynamics time step in atomic units
+delta = 10
+
+# TDCI simulation time in femtoseconds
+tdci_simulation_time = delta / 2 * autimetosec * 1e15
+
+# TDCI time step in femtoseconds
+tdci_time_step = 0.001
+
+# TDCI number of time steps
+nstep = int(math.ceil( tdci_simulation_time / tdci_time_step ))
+
+########################################
 # TDCI TeraChem Template
 ########################################
 
 nfields = 1                    # number of distinct fields (generally for multichromatic floquet)
-nstep = 125                    # number of timesteps
-tdci_simulation_time = 0.125   # in femtoseconds
 krylov_end = True              # Generate approximate eigenstates at end of calculation?
 krylov_end_n = 64              # Number of steps to save wfn on to generate approx eigenstates with.
                                # There will be 2*krylov_end_n approximate eigenstates returned.
@@ -426,15 +447,10 @@ def h5py_printall():
 
 ########################################
 # Main function
-# All calculations are in atomic units (au)
-# Source: https://en.wikipedia.org/wiki/Hartree_atomic_units
 ########################################
 
 # Atomic unit of length (Bohr radius, a_0) to angstrom (A)
 bohrtoangs = 0.529177210903
-
-# Atomic unit of time to seconds (s)
-autimetosec = 2.4188843265857e-17
 
 # Job directory
 JOBDIR = "./"
@@ -442,6 +458,11 @@ JOBDIR = "./"
 # Print header
 print("TDCI + TAB-DMS code")
 print("Ehrenfest version")
+print("")
+
+# Time steps
+print("Propagation time step in au: " + str(delta))
+print("TDCI simulation half time step in fs: " + str(tdci_simulation_time))
 print("")
 
 # Initialize TC controller
@@ -470,12 +491,6 @@ vs_curr = np.zeros([len(atoms), 3])
 # Initialize accelerations
 print("Initializing accelerations")
 as_curr = tc_grad(tc, atoms, masses, cs_curr)
-
-# Time steps
-delta = 2 * tdci_simulation_time * 1e-15 / autimetosec
-print("TDCI simulation half time step in fs: " + str(tdci_simulation_time))
-print("Propagation time step in au: " + str(delta))
-print("")
 
 # Store inital state in HDF5
 print("Storing intial state in HDF5")
