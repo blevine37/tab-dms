@@ -400,13 +400,22 @@ def h5py_printall():
     # Open h5py file
     h5f = h5py.File('data.hdf5', 'r')
 
+    # Get number of iterations
+    niters = h5f['geom'].shape[0]
+
+    # Get number atoms
+    natoms = h5f['geom'].shape[1]
+
     # Iterate and print
     for key in h5f.keys():
         print(key)
-        for vecs in h5f[key]:
-            for vec in vecs:
+        data3d = h5f[key]
+        for atomid in range(0, natoms):
+            for it in range(0, niters):
+                vec = data3d[it, atomid, :]
                 print(('{:25.17f}'*3).format(vec[0], vec[1], vec[2]))
             print("")
+    print("")
 
     # Close
     h5f.close()
@@ -495,6 +504,10 @@ for it in range(1, 2):
     # Update HDF5
     print("Updating HDF5")
     h5py_update(xs_next, vs_next, as_next)
+
+    # Print HDF5 contents
+    print("Printing HDF5 contents")
+    h5py_printall()
 
     # Update current
     xs_curr = xs_next
