@@ -32,13 +32,13 @@ f.close()
 # TDCI TeraChem Template
 ########################################
 
-nfields = 1                # number of distinct fields (generally for multichromatic floquet)
-nstep = 12000               # number of timesteps
-tdci_simulation_time = 12   # in femtoseconds
-krylov_end = True           # Generate approximate eigenstates at end of calculation?
-krylov_end_n = 64           # Number of steps to save wfn on to generate approx eigenstates with.
-                            #   There will be 2*krylov_end_n approximate eigenstates returned.
-krylov_end_interval = 80     # Number of steps between saved steps.
+nfields = 1                    # number of distinct fields (generally for multichromatic floquet)
+nstep = 125                    # number of timesteps
+tdci_simulation_time = 0.125   # in femtoseconds
+krylov_end = True              # Generate approximate eigenstates at end of calculation?
+krylov_end_n = 64              # Number of steps to save wfn on to generate approx eigenstates with.
+                               # There will be 2*krylov_end_n approximate eigenstates returned.
+krylov_end_interval = 80       # Number of steps between saved steps.
 tdci_options = {
   "gpus"                 : "1 0",
   "timings"              : "yes",
