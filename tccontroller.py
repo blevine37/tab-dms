@@ -205,7 +205,7 @@ class job:
   def run_safely(self):
     # Run the job
     retries = 0
-    while (retries < 20):
+    while (retries < 3):
       self.clean_files()
       self.make_files()
       p = self.start()
@@ -226,7 +226,7 @@ class job:
         makedirs("badjobs/"+str(self.n)+"_"+str(retries))
         shutil.copytree( self.dir, "badjobs/"+str(self.n)+"_"+str(retries))
       retries+=1
-    print("Went through 20 retries and output is still bad T_T\n")
+    print("Went through 3 retries and output is still bad T_T\n")
     return output
 
       
