@@ -212,6 +212,8 @@ def xyz_read(filename):
 #         Solution B or C will solve this issue, because nextStep() returns grad in binary
 #         Solution D: change TC source to output binary gradient, but this looks redundant,
 #         because nextStep() already returns grad in binary.
+# Note 3: Currently, the returned energy is zero. After this function is integrated with
+#         tccontroller, the correct TDCI energy must be returned.
 
 def tc_grad(tc, atoms, masses, coords):
 
@@ -306,6 +308,9 @@ def tc_grad(tc, atoms, masses, coords):
     for a, mass in zip(accs, masses):
         a /= mass
 
+    # Get energy
+    en = 0
+
     # Print end
     print("")
     print("###############################")
@@ -313,8 +318,8 @@ def tc_grad(tc, atoms, masses, coords):
     print("###############################")
     print("")
 
-    # Return accelerations
-    return accs
+    # Return accelerations and energy
+    return (accs, en)
 
 ########################################
 # TeraChem propagation and gradient
@@ -349,6 +354,9 @@ def tc_prop_and_grad(tc, atoms, masses, coords):
     for a, mass in zip(accs, masses):
         a /= mass
 
+    # Get energy
+    en = float(TCdata['eng'])
+
     # Print end
     print("")
     print("###############################")
@@ -357,7 +365,7 @@ def tc_prop_and_grad(tc, atoms, masses, coords):
     print("")
 
     # Return accelerations
-    return accs
+    return (accs, en)
 
 ########################################
 # Masses initialization
@@ -388,10 +396,26 @@ def getmasses(atoms):
     return masses
 
 ########################################
+# Kinetic energy calculation
+########################################
+
+def kincalc(masses, vs):
+
+    # Initialize energy variable
+    ke = 0
+
+    # Iterate over masses
+    for m, v in zip(masses, vs):
+        ke += m * v.dot(v) / 2
+
+    # Return energy
+    return ke
+
+########################################
 # h5py
 ########################################
 
-def h5py_update(geom, vels, accs):
+def h5py_update(geom, vels, accs, poten, kinen):
 
     # Get array dimension
     n = geom.shape[0]
@@ -405,6 +429,8 @@ def h5py_update(geom, vels, accs):
         h5f.create_dataset('geom', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
         h5f.create_dataset('vels', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
         h5f.create_dataset('accs', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
+        h5f.create_dataset('poten', (0,), maxshape=(None,), dtype='float64')
+        h5f.create_dataset('kinen', (0,), maxshape=(None,), dtype='float64')
 
     # Resize
     for key in h5f.keys():
@@ -415,6 +441,8 @@ def h5py_update(geom, vels, accs):
     h5f['geom'][-1] = geom
     h5f['vels'][-1] = vels
     h5f['accs'][-1] = accs
+    h5f['poten'][-1] = poten
+    h5f['kinen'][-1] = kinen
 
     # Close
     h5f.close()
@@ -430,8 +458,10 @@ def h5py_printall():
     # Get number atoms
     natoms = h5f['geom'].shape[1]
 
-    # Iterate and print
+    # Iterate and print vectors
     for key in h5f.keys():
+        if key == 'poten' or key == 'kinen':
+            continue
         print(key)
         data3d = h5f[key]
         for atomid in range(0, natoms):
@@ -439,6 +469,17 @@ def h5py_printall():
                 vec = data3d[it, atomid, :]
                 print(('{:25.17f}'*3).format(vec[0], vec[1], vec[2]))
             print("")
+    print("")
+
+    # Iterate and print energies
+    poten = h5f['poten']
+    kinen = h5f['kinen']
+    print(('{:>25s}'*3).format('Potential', 'Kinetic', 'Total'))
+    for it in range(0, niters):
+        pot = poten[it]
+        kin = kinen[it]
+        tot = pot + kin
+        print(('{:25.17f}'*3).format(pot, kin, tot))
     print("")
 
     # Close
@@ -490,11 +531,15 @@ vs_curr = np.zeros([len(atoms), 3])
 
 # Initialize accelerations
 print("Initializing accelerations")
-as_curr = tc_grad(tc, atoms, masses, cs_curr)
+as_curr, pe_curr = tc_grad(tc, atoms, masses, cs_curr)
+
+# Calculate initial kinetic energy
+print("Calculating initial kinetic energy")
+ke_curr = kincalc(masses, vs_curr)
 
 # Store inital state in HDF5
 print("Storing intial state in HDF5")
-h5py_update(xs_curr, vs_curr, as_curr)
+h5py_update(xs_curr, vs_curr, as_curr, pe_curr, ke_curr)
 print("")
 
 # Main dynamics loop
@@ -513,15 +558,19 @@ for it in range(1, 10000):
 
     # Propagate electronic wavefunction to half time step
     print("Propagating electronic wavefunction to half time step using next coordinates")
-    as_next = tc_prop_and_grad(tc, atoms, masses, xs_next * bohrtoangs)
+    as_next, pe_next = tc_prop_and_grad(tc, atoms, masses, xs_next * bohrtoangs)
 
     # Calculate next velocities
     print("Calculating next velocities")
     vs_next = vs_curr + (as_curr + as_next) * delta / 2
 
+    # Calculate next kinetic energy
+    print("Calculating next kinetic energy")
+    ke_next = kincalc(masses, vs_next)
+
     # Update HDF5
     print("Updating HDF5")
-    h5py_update(xs_next, vs_next, as_next)
+    h5py_update(xs_next, vs_next, as_next, pe_next, ke_next)
 
     # Print HDF5 contents
     print("Printing HDF5 contents")
@@ -531,6 +580,8 @@ for it in range(1, 10000):
     xs_curr = xs_next
     vs_curr = vs_next
     as_curr = as_next
+    pe_curr = pe_next
+    ke_curr = ke_next
 
     # Print results
     print("Iteration " + str(it).zfill(4) + " finished")
