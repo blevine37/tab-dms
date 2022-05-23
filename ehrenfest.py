@@ -141,7 +141,8 @@ def f0_values(t):
   E_strength_Wm2 = 1.0E+16 # In W/m^2
   E_str = (np.sqrt(2.0*E_strength_Wm2 / EPSILON_C) )/E_FIELD_AU  # transform to au field units
   field_freq_hz = 3.444030610581e+15 # tuned to S0 <-> S1 for rabi flop example
-  return E_str*np.sin(2.0*np.pi * field_freq_hz*HZtoAU * t)
+#  return E_str*np.sin(2.0*np.pi * field_freq_hz*HZtoAU * t)
+  return 0 * t   # Field is temporarily off
 
 FIELD_INFO = { "tdci_simulation_time": tdci_simulation_time,
                "nstep"               : nstep,
