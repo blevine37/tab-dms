@@ -10,7 +10,6 @@ import tccontroller
 import numpy as np
 import shutil, os, subprocess, time
 import h5py
-import math
 
 ########################################
 # Job Template
@@ -45,11 +44,8 @@ delta = 10
 # TDCI simulation time in femtoseconds
 tdci_simulation_time = delta / 2 * autimetosec * 1e15
 
-# TDCI time step in femtoseconds
-tdci_time_step = 0.001
-
 # TDCI number of time steps
-nstep = int(math.ceil( tdci_simulation_time / tdci_time_step ))
+nstep = 1000
 
 ########################################
 # TDCI TeraChem Template
