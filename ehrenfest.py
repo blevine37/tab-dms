@@ -11,6 +11,11 @@ import numpy as np
 import shutil, os, subprocess, time
 import h5py
 
+# to install h5py:
+# $ apt install libhdf5-dev
+# $ HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/
+# $ pip2 install h5py
+
 ########################################
 # Job Template
 ########################################
@@ -18,11 +23,11 @@ import h5py
 if not os.path.exists("./templates"):
     os.makedirs("./templates")
 
-TERACHEM = "/home/ateplukhin/Source/terachem/build/bin/" # terachem executable stored here
+TERACHEM = "/home/adurden/terachem/build/bin/" # terachem executable stored here
 # make sure you include temppath and tempname in your job template!
 #  those keywords are search and replaced
 job_template_contents = "#!/bin/bash\n\
-                         source /home/ateplukhin/.bashrc\n\
+                         source /home/adurden/.bashrc\n\
                          cd temppath\n\
                         "+TERACHEM+"terachem tempname.in > tempname.out\n"
 
@@ -53,12 +58,11 @@ nstep = 1000
 
 nfields = 1                    # number of distinct fields (generally for multichromatic floquet)
 krylov_end = True              # Generate approximate eigenstates at end of calculation?
-krylov_end_n = 64              # Number of steps to save wfn on to generate approx eigenstates with.
+krylov_end_n = 6              # Number of steps to save wfn on to generate approx eigenstates with.
                                # There will be 2*krylov_end_n approximate eigenstates returned.
-krylov_end_interval = 80       # Number of steps between saved steps.
-tdci_options = {
+krylov_end_interval = 20       # Number of steps between saved steps.
+TDCI_TEMPLATE = {
   "gpus"                 : "1 0",
-  "timings"              : "yes",
   "precision"            : "double",
   "threall"              : "1.0e-20",
   "convthre"             : "1.0e-6",
@@ -111,14 +115,11 @@ tdci_options = {
   "tdci_prevcoords_readfile": "PrevCoors.bin"
 }
 if krylov_end:
-  tdci_options["tdci_krylov_init"] = "yes"
-  tdci_options["tdci_krylovmo_readfile"] = "cn_krylov_init.bin"
+  # CI vector transformation from Krylov basis to determinant basis
+  # if Yes, we expect nextstep arguments to be in Krylov basis.
+  TDCI_TEMPLATE["tdci_krylov_init"] = "no"
+  TDCI_TEMPLATE["tdci_krylovmo_readfile"] = "cn_krylov_init.bin"
 
-# Disable CI vector transformation from Krylov basis to determinant basis
-tdci_options["tdci_krylov_init"] = "no"
-
-TDCI_TEMPLATE = "./templates/tdci.in"
-tccontroller.dict_to_file(tdci_options, TDCI_TEMPLATE)
 
 ########################################
 # External field
@@ -148,23 +149,6 @@ FIELD_INFO = { "tdci_simulation_time": tdci_simulation_time,
                "krylov_end_n"        : krylov_end_n
              }
 
-########################################
-# TCdata keys
-########################################
-
-"""
-  Dictionary keys in TCdata:
-           "recn"              - 1d array, number of determinants (ndets)
-           "imcn"              - 1d array, ndets
-           "eng"               - float, Energy of current wfn
-           "grad"              - 2d array, Natoms x 3 dimensions.
-           "recn_krylov"       - 1d array, 2*krylov_end_n
-           "imcn_krylov"       - 1d array, 2*krylov_end_n
-           "krylov_states"     - 2d array Approx Eigenstates in MO basis. 2*krylov_end_n x ndets
-           "krylov_energies"   - 1d array of energies of each approx eigenstate
-           "krylov_gradients"  - 3d array of approx eigenstate gradients, Napprox x Natoms x 3dim
-
-"""
 
 ########################################
 # Geometry read and write
@@ -220,81 +204,20 @@ def tc_grad(tc, atoms, masses, coords):
     print("##### TERACHEM GRAD BEGIN #####")
     print("###############################")
     print("")
+    """
+      Dictionary keys in grad output:
+	       "eng"               - float, Energy of current wfn
+	       "grad"              - 2d array, Natoms x 3 dimensions.
 
-    # Create directory
-    graddir = "./grad"
-    if not os.path.exists(graddir):
-        os.makedirs(graddir)
+      INPUT:
+		xyz                - string, path of xyz file.
+		ReCn (optional)    - Real component of CI vector. If none, ground state is used. 
+		ImCn (optional)    - Imaginary component of CI vector.
+    """
 
-    # Wrire job file
-    shutil.copy(JOB_TEMPLATE, graddir + "/grad.job")
-    tccontroller.search_replace_file(graddir + "/grad.job", "temppath", graddir)
-    tccontroller.search_replace_file(graddir + "/grad.job", "tempname", "grad")
-
-    # Write xyz file
-    xyz_write(atoms, coords, graddir + "/grad.xyz")
-
-    # Write TeraChem input file
-    terachem_input = {
-      "gpus"                 : "1 0",
-      "timings"              : "yes",
-      "precision"            : "double",
-      "threall"              : "1.0e-20",
-      "convthre"             : "1.0e-6",
-      "basis"                : "sto-3g",
-      "coordinates"          : "grad.xyz",
-      "method"               : "hf",
-      "run"                  : "gradient",
-      "charge"               : "0",
-      "spinmult"             : "1",
-      "csf_basis"            : "no",
-      ""                     : "",
-      "casci"                : "yes",
-      "ci_solver"            : "direct",
-      "dcimaxiter"           : "300",
-      "dciprintinfo"         : "yes",
-      "dcipreconditioner"    : "orbenergy",
-      ""                     : "",
-      "closed"               : "5",
-      "active"               : "6",
-      "cassinglets"          : "3",
-      "castriplets"          : "0",
-      "cascharges"           : "yes",
-      "cas_ntos"             : "yes",
-      ""                     : "",
-      "cassavevectors"       : "yes",
-      ""                     : "",
-      "casgradmult"          : "1 1 1",
-      "casgradstate"         : "0 1 2"
-    }
-    tccontroller.dict_to_file(terachem_input, graddir + "/grad.in")
-
-    # Start TeraChem
-    p = subprocess.Popen("bash " + graddir + "/grad.job", shell=True)
-
-    # Wait to finish
-    while True:
-        time.sleep(5)
-        if p.poll() == None:
-            print("Still running...\n")
-        else:
-            print("Done!\n")
-            break
-
-    # Get gradient
-    n = len(atoms)
-    grad = np.empty([n, 3])
-    f = open(graddir+"/grad.out",'r')
-    while not "Gradient units are Hartree/Bohr" in f.readline(): pass
-    print(f.readline())
-    print(f.readline())
-    for i in range(0, n):
-        fields = f.readline().split()
-        if len(fields) != 3: break
-        grad[i][0] = float(fields[0])
-        grad[i][1] = float(fields[1])
-        grad[i][2] = float(fields[2])
-    f.close()
+    grad_data = tc.grad(atoms) # Terachem, do your thing!
+    grad = grad_data["grad"]
+    en = grad_data["eng"]
 
     # Get forces (Hartree/Bohr)
     forces = - grad
@@ -304,9 +227,6 @@ def tc_grad(tc, atoms, masses, coords):
     accs = np.copy(forces)
     for a, mass in zip(accs, masses):
         a /= mass
-
-    # Get energy
-    en = 0
 
     # Print end
     print("")
@@ -339,6 +259,23 @@ def tc_prop_and_grad(tc, atoms, masses, coords):
     xyz_write(atoms, coords, xyzfilename)
 
     # Call TeraChem
+    """
+      Dictionary keys in nextstep output:
+	       "recn"              - 1d array, number of determinants (ndets)
+	       "imcn"              - 1d array, ndets
+	       "eng"               - float, Energy of current wfn
+	       "grad"              - 2d array, Natoms x 3 dimensions.
+	       "recn_krylov"       - 1d array, 2*krylov_end_n
+	       "imcn_krylov"       - 1d array, 2*krylov_end_n
+	       "krylov_states"     - 2d array Approx Eigenstates in MO basis. 2*krylov_end_n x ndets
+	       "krylov_energies"   - 1d array of energies of each approx eigenstate
+	       "krylov_gradients"  - 3d array of approx eigenstate gradients, Napprox x Natoms x 3dim
+
+      INPUT:
+		xyz                - string, path of xyz file.
+		ReCn (optional)    - Real component of CI vector. If none, ground state is used. 
+		ImCn (optional)    - Imaginary component of CI vector.
+    """
     TCdata = tc.nextstep(xyzfilename)
     print("")
 
@@ -379,7 +316,7 @@ def getmasses(atoms):
     massdata['O'] = 15.99491461957
     massdata['S'] = 31.9720711744
     
-    # Build nympy array of masses
+    # Build numpy array of masses
     natoms = len(atoms)
     masses = np.empty([natoms])
     for i in range(0, natoms):
@@ -528,7 +465,7 @@ vs_curr = np.zeros([len(atoms), 3])
 
 # Initialize accelerations
 print("Initializing accelerations")
-as_curr, pe_curr = tc_grad(tc, atoms, masses, cs_curr)
+as_curr, pe_curr = tc_grad(tc, geomfilename, masses, cs_curr)
 
 # Calculate initial kinetic energy
 print("Calculating initial kinetic energy")

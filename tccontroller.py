@@ -2,14 +2,15 @@
 
 from __future__ import print_function
 import numpy as np
-import struct, shutil, os, subprocess, time
+import struct, shutil, os, sys, subprocess, time
+import copy
 
 FStoAU = 41.341375
 EPSILON_C = 0.00265316
 E_FIELD_AU = 5.142206707E+11
 
 
-
+# TCPB uses what im calling "tcstring" 
 def tcstring_to_xyz(atoms,geom,filename):
   f = open(filename,'w')
   f.write(str(len(atoms))+"\n\n")
@@ -30,25 +31,47 @@ def xyz_to_tcstring(filename):
     geom.append(l.split(" ")[2]) 
     geom.append(l.split(" ")[3])
     l = f.readline()
-  
 
+# Used to sort input file dictionaries into something a little more human-readable
+def dictkey(key):
+  keylist = ["gpus", "timings", "precision", "threall", "convthre", "basis", 
+             "coordinates", "method", "run", "to", "charge", "spinmult", "csf_basis",
+             "tdci_simulation_time", "tdci_nstep", "tdci_eshift", "tdci_stepprint",
+             "tdci_nfields", "tdci_laser_freq", "tdci_photoneng", "tdci_fstrength",
+             "tdci_fdirection", "tdci_ftype", "tdci_corrfn_t", "tdci_write_field",
+             "tdci_floquet", "tdci_floquet_photons", "tdci_krylov_end", "tdci_krylov_end_n",
+             "tdci_krylov_end_interval", "tdci_diabatize_orbs", "tdci_recn_readfile",
+             "tdci_imcn_readfile", "tdci_prevorbs_readfile", "tdci_prevcoords_readfile",
+             "tdci_gradient", "tdci_grad_init", "tdci_fieldfile0", "tdci_fieldfile1",
+             "tdci_fieldfile2", "tdci_fieldfile3", "tdci_fieldfile4",
+             "casci", "ci_solver", "dcimaxiter",
+             "dciprintinfo", "dcipreconditioner", "closed", "active", "cassinglets",
+             "casdoublets", "castriples", "casquartets", "cascharges", "cas_ntos",]
+  if key in keylist:
+    return keylist.index(key)
+  else:
+    return len(keylist)+1
 
 def dict_to_file(d, filepath):
+  dkeys = d.keys()
+  dkeys.sort(key=dictkey)
   f = open(filepath, 'w')
-  for key, value in d.iteritems():
-    f.write(str(key)+" "+str(value)+"\n")
+  for key in dkeys:
+    f.write(str(key)+" "+str(d[key])+"\n")
   f.close()
 
 def dicts_to_file(dlist, filepath):
   f = open(filepath, 'w')
   for d in dlist:
-    for key, value in d.iteritems():
-      f.write(str(key)+" "+str(value)+"\n")
+    dkeys = d.keys()
+    dkeys.sort(key=dictkey)
+    for key in dkeys:
+      f.write(str(key)+" "+str(d[key])+"\n")
   f.close()
 
 # we may need to be careful about endian-ness if this runs on a different machine than TC
 def read_bin_array(filepath, length):
-  print("l: "+str(length))
+  #print("l: "+str(length))
   if length == 0:
     return np.array([])
   f = open(filepath, 'rb')
@@ -63,8 +86,8 @@ def read_csv_array(filepath):
 # accepts ONE-DIMENSIONAL DOUBLE ARRAYS	
 def write_bin_array(array, filepath):
   if (len(np.shape(array)) != 1):
-    print("WARNING: write_bin_array() is for ONE-DIMENSION DOUBLE ARRAYS!! Why are you trying to write the following as one?:")
-    print(array)
+    print("WARNING: write_bin_array() is for 1D double arrays! Your array has shape:")
+    print(np.shape(array))
   f = open(filepath, 'wb')
   f.write( struct.pack('d'*len(array), *array ))
   f.close(); del f
@@ -74,11 +97,13 @@ def search_replace_file(filepath, search, replace):
   p.wait()
   return 0
 
+# ensure every subdirectory of a path exists
 def makedirs(dirstr):
   for i in range(2, dirstr.count("/")+1):
     if not os.path.exists("/".join(dirstr.split("/")[0:i])):
       os.mkdir("/".join(dirstr.split("/")[0:i]))
   return os.path.exists(dirstr)
+
 
 
 class job:
@@ -98,6 +123,7 @@ class job:
     self.FIELD_INFO = FIELD_INFO
     self.ndets = 0
     self.restarts = 0
+    self.gradjob = False
 
   def start(self):
     p = subprocess.Popen( 'bash '+self.dir+'tdci.job', shell=True)
@@ -116,39 +142,47 @@ class job:
     search_replace_file(self.dir+"tdci.job", "temppath", self.dir)
     search_replace_file(self.dir+"tdci.job", "tempname", "test"+str(self.n))
     tempname = "test"+str(self.n)+".in"
-    shutil.copy(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
+    #if self.gradjob:
+    #  tempname = "grad.in"
+    #shutil.copy(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
+    dict_to_file(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
     search_replace_file(self.dir+tempname, "coords.xyz", self.xyzpath.split("/")[-1]) 
-    self.make_fieldfiles()
-    if self.n==0:
+    if self.gradjob:
+      search_replace_file(self.dir+tempname, "tdci_fieldfile0 field0.bin", "")
+      search_replace_file(self.dir+tempname, "tdci_fieldfile1 field1.bin", "")
+      search_replace_file(self.dir+tempname, "tdci_fieldfile2 field2.bin", "")
+    else:
+      self.make_fieldfiles()
+    if (self.n==0 or self.gradjob):
       search_replace_file(self.dir+tempname, "tdci_diabatize_orbs yes", "tdci_diabatize_orbs no")
       if type(self.ReCn) == type(None):
-	search_replace_file(self.dir+tempname, "tdci_recn_readfile recn_init.bin", "")
+        search_replace_file(self.dir+tempname, "tdci_recn_readfile recn_init.bin", "")
       else:
-	write_bin_array(self.ReCn,self.dir+"recn_init.bin")
+        write_bin_array(self.ReCn,self.dir+"recn_init.bin")
       if type(self.ImCn) == type(None):
-	search_replace_file(self.dir+tempname, "tdci_imcn_readfile imcn_init.bin", "")
+        search_replace_file(self.dir+tempname, "tdci_imcn_readfile imcn_init.bin", "")
       else:
-	write_bin_array(self.ImCn,self.dir+"imcn_init.bin")
-
+        write_bin_array(self.ImCn,self.dir+"imcn_init.bin")
       search_replace_file(self.dir+tempname, "tdci_prevorbs_readfile PrevC.bin", "")
       search_replace_file(self.dir+tempname, "tdci_prevcoords_readfile PrevCoors.bin", "")
       search_replace_file(self.dir+tempname, "tdci_krylov_init cn_krylov_init.bin", "")
+      return 0
 
     else: # Copy Prev Orbitals and Coords (in double4) for orbital diabatization
       pjobd = self.pjob.dir
       shutil.copy(pjobd+"/NewCoors.bin", self.dir+"/PrevCoors.bin")
       shutil.copy(pjobd+"/NewC.bin", self.dir+"/PrevC.bin")
       if type(self.ReCn) == type(None):
-	shutil.copy(pjobd+"/ReCn_end.bin", self.dir+"/recn_init.bin")
+        shutil.copy(pjobd+"/ReCn_end.bin", self.dir+"/recn_init.bin")
       else:
-	write_bin_array(self.ReCn,self.dir+"recn_init.bin")
+        write_bin_array(self.ReCn,self.dir+"recn_init.bin")
       if type(self.ImCn) == type(None):
-	shutil.copy(pjobd+"/ImCn_end.bin", self.dir+"/imcn_init.bin")
+        shutil.copy(pjobd+"/ImCn_end.bin", self.dir+"/imcn_init.bin")
       else:
-	write_bin_array(self.ImCn,self.dir+"imcn_init.bin")
-      
+        write_bin_array(self.ImCn,self.dir+"imcn_init.bin")
       if self.FIELD_INFO["krylov_end"]:
         shutil.copy(pjobd+"/Cn_krylov_end.bin", self.dir+"/cn_krylov_init.bin")
+      return 0
 
   def clean_files(self):
     if os.path.exists(self.dir):
@@ -185,8 +219,8 @@ class job:
       print("Final wfn norm (AES basis): "+str(norm))
       krylov_MO_Re = np.matmul(np.transpose(output["krylov_states"]), output["recn_krylov"])
       krylov_MO_Im = np.matmul(np.transpose(output["krylov_states"]), output["recn_krylov"])
-      print("Checking AES basis quality:")
-      print("ReCn:")
+      #print("Checking AES basis quality:")
+      #print("ReCn:")
       #print(output["recn"])
       #print("ImCn:")
       #print(output["imcn"])
@@ -210,20 +244,39 @@ class job:
       self.make_files()
       p = self.start()
       print("Started "+str(self.dir)+"\n")
-      finished = 0
+      finished = False
       # Periodically check if the process is finished
+      i = 1
+      status = "TC Running."
+      print(status, end=""); sys.stdout.flush()
       while not finished:
-        time.sleep(5)
         if self.check_status(p):
           finished = True
+        else: # fun rotating dots
+          if (i%10 == 0):
+            print("\b"*9, end="");
+            print(" "*9, end="");
+            print("\b"*9, end=""); sys.stdout.flush()
+          else:
+            print(".", end=""); sys.stdout.flush()
+        time.sleep(1)
+        i+=1
       # Make sure output is good
-      output = self.output()
+      if self.gradjob: # if we're doing gradient only (not tdci) for initial step
+        output = self.gradoutput()
+      elif self.TDCI_TEMPLATE["run"] == "frequencies":
+        xyzname = os.path.basename(self.xyzpath) # remove directories from path
+        xyzname = xyzname[:xyzname.rindex(".")] # remove extension
+        scrdir = self.dir + "scr."+xyzname+"/"
+        output = self.read_hessfile(scrdir+"Hessian.bin")
+      else: # normal tdci
+	output = self.output()
       if output: # Everything checks out!
         print("Output looks good!")
         return output
       else: # Outputs bad, try redoing the job!
-        print("Output is bad. Restarting the job.")
-        makedirs("badjobs/"+str(self.n)+"_"+str(retries))
+        print("Output is bad. Restarting the job. See bad jobfiles in ./badjobs/"+str(self.n)+"_"+str(retries))
+        makedirs("./badjobs/"+str(self.n)+"_"+str(retries))
         shutil.copytree( self.dir, "badjobs/"+str(self.n)+"_"+str(retries))
       retries+=1
     print("Went through 3 retries and output is still bad T_T\n")
@@ -236,12 +289,10 @@ class job:
       pass
     else: 
       result = p.poll()
-      print(result)
+      #print(result)
       if result != None: # returns None if still running
-        print("Done!\n")
         return True
       else:
-        print("Still running...\n")
         return False
 
   # key : list of words that match the beginning of line.split()
@@ -258,6 +309,42 @@ class job:
     print("key "+str(key)+" not found :( ")
     return None
 
+  def gradoutput(self):
+    filesgood = True
+    files = ["gradinit.bin"]
+    for fn in files:
+      if not os.path.exists(self.dir+fn):
+        filesgood = False
+        print("ERROR: "+fn+" missing")
+    if not filesgood:
+      return False
+    grad = read_bin_array(self.dir+"gradinit.bin", 3*self.Natoms)
+    grad.resize((self.Natoms,3))
+    #E = float(read_bin_array(self.dir+"Einit.bin", 1)[0])
+    E = float(self.scan_outfile(["Initial", "energy:"], 2))
+    return { "grad": grad,
+             "eng": E }
+
+
+  def read_hessfile(self, filepath):
+    natoms = self.Natoms
+    # 2*sizeof(int)+sizeof(double)+natoms*sizeof(double4);
+    nbytes = 2*4+8+(natoms)*(4*8)
+    f = open(filepath, 'rb')
+    #print(len(f.read()))
+    #f.seek(0)
+    first = f.read(nbytes)
+    second = f.read(((3*natoms)**2)*8)
+    third = f.read((3*3*natoms)*8)
+    rest = f.read()
+    if len(rest) != 0:
+      print("ERROR: Extra bytes in Hessian.bin, something isn't right...")
+    #print( (len(first),len(second),len(third),len(rest)))
+    hessian = np.array(struct.unpack('d'*((3*natoms)**2), second))
+    hessian.resize((3*natoms,3*natoms))
+    size = 3 # if RunPolarizability in TC, this should be 12. Not sure if we ever need that.
+    dipolederiv = np.array(struct.unpack('d'*(size*3*natoms), third))
+    return {"hessian": hessian, "dipolederiv": dipolederiv}
 
   def output(self):
     filesgood = True
@@ -266,13 +353,13 @@ class job:
       files += ["ReCn_krylov_end.bin", "ImCn_krylov_end.bin", "Cn_krylov_end.bin", "E_krylov_end.bin", "tdcigrad_krylov.bin"]
     for fn in files:
       if not os.path.exists(self.dir+fn):
-	filesgood = False
-	print("ERROR: "+fn+" missing")
+        filesgood = False
+        print("ERROR: "+fn+" missing")
     if not filesgood:
       return False
 
     self.readmisc()
-    eng = self.scan_outfile(["Final", "TDCI", "Energy:"], 3)
+    eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
     grad = read_bin_array(self.dir+"tdcigrad.bin", 3*self.Natoms)
     grad.resize((self.Natoms, 3))
     krylov_states = None
@@ -306,8 +393,8 @@ class job:
                "krylov_gradients": krylov_gradients # 3d array of approx eigenstate gradients, Napprox x Natoms x 3 dim.
              }
 
-    print("TDCI job Output:\n")
-    print(output)
+    #print("TDCI job Output:\n")
+    #print(output)
 
     if self.check_output(output):
       #self.sanity_test(output)
@@ -357,6 +444,40 @@ class tccontroller:
     self.Natoms = None
     self.Nkrylov = 2*FIELD_INFO["krylov_end_n"]
 
+  def grad(self, xyzpath, ReCn=None, ImCn=None):
+    if self.N == 0:
+      f = open(xyzpath, 'r')
+      self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
+      f.close();del f
+    grad_template = copy.deepcopy(self.TDCI_TEMPLATE)
+    # overwrite template to do gradient stuff instead of tdci
+    #grad_template["run"] = "gradient"
+    #grad_template["cassavevectors"] = "yes"
+    #grad_template["casgradmult"] = "1 1 1"
+    #grad_template["casgradstate"] = "0 1 2"
+    grad_template["tdci_grad_init"] = "yes"
+    grad_template["tdci_fstrength"] = "0.0"
+    grad_template["tdci_simulation_time"] = "0.01"
+    grad_template["tdci_nstep"] = "1"
+    grad_template["tdci_krylov_end"] = "no"
+    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, self.SCHEDULER)
+    j.gradjob = True
+    j.dir = self.JOBDIR+"electronic/grad/"
+    return j.run_safely()
+
+  def hessian(self, xyzpath, temp):
+    if self.N == 0:
+      f = open(xyzpath, 'r')
+      self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
+      f.close();del f
+    hess_template = copy.deepcopy(self.TDCI_TEMPLATE)
+    hess_template["run"] = "frequencies"
+    hess_template["to"] = str(temp)
+    j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, self.SCHEDULER)
+    j.dir = self.JOBDIR+"electronic/hessian"+str(self.N)+"/"
+    return j.run_safely()
+    
+    
 
   def nextstep(self, xyzpath, ReCn=None, ImCn=None):
     #print("nextstep: "+str(self.N)+"\n")
@@ -369,9 +490,6 @@ class tccontroller:
       j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, self.jobs[-1], self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, self.SCHEDULER)
     self.jobs.append(j)
     self.N+=1
-    #print("appended N, it's "+str(self.N)+" now :D\n")
-    #j.run_safely()
-    #return j.output()
     return j.run_safely()
     
 
