@@ -182,21 +182,7 @@ def xyz_read(filename):
 # Returns accelerations
 ########################################
 
-# Note 1: Ideally this function must be a part of tccontroller, because
-#         tccontroller is responsible for interfacing with TeraChem.
-#         Solution A: the function could be moved almost as-is into tccontroller.
-#         Solution B: nextStep() method could allow propagation for 0 fs.
-#         Solution C: nextStep() method could provide an option to change the order of propagation and grad.
-#         In case of B and C, this function can be deleted.
-# Note 2: Since this is a plain gradient TC calculation, the gradient is
-#         returned as text. Ideally, we want it in binary form.
-#         Solution B or C will solve this issue, because nextStep() returns grad in binary
-#         Solution D: change TC source to output binary gradient, but this looks redundant,
-#         because nextStep() already returns grad in binary.
-# Note 3: Currently, the returned energy is zero. After this function is integrated with
-#         tccontroller, the correct TDCI energy must be returned.
-
-def tc_grad(tc, atoms, masses, coords):
+def tc_grad(tc, atoms, masses, coords, ReCn=None, ImCn=None, return_states=False):
 
     # Print begin
     print("")
@@ -208,6 +194,8 @@ def tc_grad(tc, atoms, masses, coords):
       Dictionary keys in grad output:
 	       "eng"               - float, Energy of current wfn
 	       "grad"              - 2d array, Natoms x 3 dimensions.
+	       "states"            - 2d array, Nstates x ndets.
+	       "states_eng"        - 2d array, Nstates.
 
       INPUT:
 		xyz                - string, path of xyz file.
@@ -215,7 +203,10 @@ def tc_grad(tc, atoms, masses, coords):
 		ImCn (optional)    - Imaginary component of CI vector.
     """
 
-    grad_data = tc.grad(atoms) # Terachem, do your thing!
+    if (type(ReCn) == type(None)):
+      grad_data = tc.grad(atoms) # Terachem, do your thing!
+    else:
+      grad_data = tc.grad(atoms, ReCn, ImCn) # Initial Conditions
     grad = grad_data["grad"]
     en = grad_data["eng"]
 
@@ -236,14 +227,17 @@ def tc_grad(tc, atoms, masses, coords):
     print("")
 
     # Return accelerations and energy
-    return (accs, en)
+    if return_states:
+      return (accs, en, grad_data["states"])
+    else:
+      return (accs, en)
 
 ########################################
 # TeraChem propagation and gradient
 # Returns accelerations
 ########################################
 
-def tc_prop_and_grad(tc, atoms, masses, coords):
+def tc_prop_and_grad(tc, atoms, masses, coords, ReCn=None, ImCn=None):
 
     # Print begin
     print("")
@@ -276,7 +270,10 @@ def tc_prop_and_grad(tc, atoms, masses, coords):
 		ReCn (optional)    - Real component of CI vector. If none, ground state is used. 
 		ImCn (optional)    - Imaginary component of CI vector.
     """
-    TCdata = tc.nextstep(xyzfilename)
+    if (type(ReCn) == type(None)):
+      TCdata = tc.nextstep(xyzfilename)
+    else: # For inital conditions
+      TCdata = tc.nextstep(xyzfilename, ReCn, ImCn)
     print("")
 
     # Get forces (Hartree/Bohr)
@@ -393,6 +390,7 @@ def h5py_printall():
     natoms = h5f['geom'].shape[1]
 
     # Iterate and print vectors
+    """
     for key in h5f.keys():
         if key == 'poten' or key == 'kinen':
             continue
@@ -404,6 +402,7 @@ def h5py_printall():
                 print(('{:25.17f}'*3).format(vec[0], vec[1], vec[2]))
             print("")
     print("")
+    """
 
     # Iterate and print energies
     poten = h5f['poten']
@@ -419,10 +418,20 @@ def h5py_printall():
     # Close
     h5f.close()
 
+# Need to make sure hdf5 and job directories from previous runs don't get in the way
+def clean_files():
+  if os.path.exists("oldrun/"):
+    shutil.rmtree("oldrun/")
+  os.makedirs("oldrun/")
+  shutil.move("electronic", "oldrun/electronic")
+  shutil.move("data.hdf5", "oldrun/data.hdf5")
+
 
 ########################################
 # Main function
 ########################################
+
+clean_files()
 
 # Atomic unit of length (Bohr radius, a_0) to angstrom (A)
 bohrtoangs = 0.529177210903
@@ -463,9 +472,19 @@ xs_curr = cs_curr / bohrtoangs
 print("Initializing velocities")
 vs_curr = np.zeros([len(atoms), 3])
 
+# AD: TODO: some optimization can be done here
+#     right now tc.grad expects an arbitrary CI vector (or defaults to S0)
+#     That means if we want S1 initial conditions, we have to call TC to solve states
+#     and THEN feed one of those states back into tc.grad... not efficient.
+#     If we add some more params to terachem, we can do this in one call
+
+# Get states for inital conditions
+gradout = tc.grad(geomfilename) 
+initial_recn = gradout["states"][1]
+
 # Initialize accelerations
 print("Initializing accelerations")
-as_curr, pe_curr = tc_grad(tc, geomfilename, masses, cs_curr)
+as_curr, pe_curr = tc_grad(tc, geomfilename, masses, cs_curr, ReCn=initial_recn)
 
 # Calculate initial kinetic energy
 print("Calculating initial kinetic energy")
@@ -486,12 +505,20 @@ for it in range(1, 10000):
     print("Calculating next geometry")
     xs_next = xs_curr + vs_curr * delta + as_curr * delta**2 / 2
 
-    # Propagate electronic wavefunction to half time step
-    print("Propagating electronic wavefunction to half time step using current coordinates")
-    tc_prop_and_grad(tc, atoms, masses, xs_curr * bohrtoangs)
+    # AD: TODO: In the previous iteration we're doing TDCI with the same coorinates,
+    #     I think we can avoid extra single-point electronic structure calcs by
+    #     doubling the propagation time and having TC spit out data halfway
+    #     through the propagation.
 
     # Propagate electronic wavefunction to half time step
-    print("Propagating electronic wavefunction to half time step using next coordinates")
+    print("Propagating electronic wavefunction to half time step using current coordinates")
+    if (it == 1): # On first iteration we want to use S1's CI vector as initial condition.
+      tc_prop_and_grad(tc, atoms, masses, xs_curr*bohrtoangs, ReCn=initial_recn)
+    else: # On subsequent iterations use previous final CI vector by default
+      tc_prop_and_grad(tc, atoms, masses, xs_curr * bohrtoangs)
+
+    # Propagate electronic wavefunction to half time step
+    print("Propagating electronic wavefunction to next time step using next coordinates")
     as_next, pe_next = tc_prop_and_grad(tc, atoms, masses, xs_next * bohrtoangs)
 
     # Calculate next velocities

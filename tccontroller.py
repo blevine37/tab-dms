@@ -311,7 +311,7 @@ class job:
 
   def gradoutput(self):
     filesgood = True
-    files = ["gradinit.bin"]
+    files = ["gradinit.bin", "States_Cn.bin", "States_E.bin", "misc.bin"]
     for fn in files:
       if not os.path.exists(self.dir+fn):
         filesgood = False
@@ -322,8 +322,23 @@ class job:
     grad.resize((self.Natoms,3))
     #E = float(read_bin_array(self.dir+"Einit.bin", 1)[0])
     E = float(self.scan_outfile(["Initial", "energy:"], 2))
-    return { "grad": grad,
-             "eng": E }
+    nstates = int(self.TDCI_TEMPLATE["cassinglets"])
+    if "casdoublets" in self.TDCI_TEMPLATE:
+      nstates+= int(self.TDCI_TEMPLATE["casdoublets"])
+    if "castriplets" in self.TDCI_TEMPLATE:
+      nstates+= int(self.TDCI_TEMPLATE["castriplets"])
+    if "casquartets" in self.TDCI_TEMPLATE:
+      nstates+= int(self.TDCI_TEMPLATE["casquartets"])
+    if (self.ndets == 0):
+      self.readmisc()
+    states = read_bin_array(self.dir+"States_Cn.bin", nstates*self.ndets)
+    states.resize((nstates, self.ndets))
+    states_eng = read_bin_array(self.dir+"States_E.bin", nstates)
+    return { "grad"       : grad,
+             "eng"        : E,
+             "states"     : states,
+             "states_eng" : states_eng
+           }
 
 
   def read_hessfile(self, filepath):
@@ -358,7 +373,8 @@ class job:
     if not filesgood:
       return False
 
-    self.readmisc()
+    if (self.ndets == 0):
+      self.readmisc()
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
     grad = read_bin_array(self.dir+"tdcigrad.bin", 3*self.Natoms)
     grad.resize((self.Natoms, 3))
