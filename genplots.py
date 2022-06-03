@@ -130,6 +130,27 @@ def h5py_plot():
     h5f.close()
 
 
+def plot_populations(nstates, nsteps):
+  pops = []
+  for i in range(0,nstates):
+    pops.append([])
+  # Read populations from first step of each TDCI calc
+  for i in range(0,nsteps):
+    f = open("electronic/"+str(i)+"/Pop", 'r')
+    l = (f.readline()).split(",")
+    for j in range(0,nstates):
+      pops[j].append(float(l[j+1])) # first element in l is time
+    f.close()
+  # Plot 'em
+  fig = plt.figure()
+  ax = fig.add_subplot(111)
+  for i in range(0,nstates):
+    ax.plot(range(0,nsteps),pops[i], label="S"+str(i), marker="o", markersize="3", linewidth=1.2)
+  ax.legend()
+  plt.savefig("Pops.png", dpi=800, bbox_inches='tight')
+  
+
+    
 
 
 
@@ -175,6 +196,7 @@ nstates = 3
 print("nsteps: "+str(nsteps))
 
 plot_state_energies(nstates, nsteps)
+plot_populations(nstates,nsteps)
 
 h5py_plot()
 

@@ -94,7 +94,7 @@ TDCI_TEMPLATE = {
   "dcipreconditioner"    : "orbenergy",
   "closed"               : "5",
   "active"               : "6",
-  "cassinglets"          : "3",
+  "cassinglets"          : "30",
   "castriplets"          : "0",
   "cascharges"           : "yes",
   "cas_ntos"             : "yes",
@@ -423,8 +423,10 @@ def clean_files():
   if os.path.exists("oldrun/"):
     shutil.rmtree("oldrun/")
   os.makedirs("oldrun/")
-  shutil.move("electronic", "oldrun/electronic")
-  shutil.move("data.hdf5", "oldrun/data.hdf5")
+  if os.path.exists("electronic"):
+    shutil.move("electronic", "oldrun/electronic")
+  if os.path.exists("data.hdf5"):
+    shutil.move("data.hdf5", "oldrun/data.hdf5")
 
 
 ########################################
