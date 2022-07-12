@@ -1,4 +1,5 @@
 #!/usr/bin/python2.7
+# Written by Andy Durden 2022
 
 from __future__ import print_function
 import numpy as np
@@ -24,7 +25,7 @@ def xyz_to_tcstring(filename):
   l = f.readline()
   atoms = []
   geom = []
-  print(l.split(" "))
+  #print(l.split(" "))
   while len(l.split(" "))==4:
     atoms.append(l.split(" ")[0])
     geom.append(l.split(" ")[1]) 
@@ -42,7 +43,7 @@ def dictkey(key):
              "tdci_floquet", "tdci_floquet_photons", "tdci_krylov_end", "tdci_krylov_end_n",
              "tdci_krylov_end_interval", "tdci_diabatize_orbs", "tdci_recn_readfile",
              "tdci_imcn_readfile", "tdci_prevorbs_readfile", "tdci_prevcoords_readfile",
-             "tdci_gradient", "tdci_grad_init", "tdci_fieldfile0", "tdci_fieldfile1",
+             "tdci_gradient", "tdci_grad_init", "tdci_grad_half", "tdci_fieldfile0", "tdci_fieldfile1",
              "tdci_fieldfile2", "tdci_fieldfile3", "tdci_fieldfile4",
              "casci", "ci_solver", "dcimaxiter",
              "dciprintinfo", "dcipreconditioner", "closed", "active", "cassinglets",
@@ -104,10 +105,35 @@ def makedirs(dirstr):
       os.mkdir("/".join(dirstr.split("/")[0:i]))
   return os.path.exists(dirstr)
 
+class logger():
+  def __init__(self):
+    self.maxlogs = 20
+    self.rotate_logs()
+    f = open("log",'w');f.write("");f.close();del f
+    
+  def rotate_logs(self):
+    i = self.maxlogs
+    if os.path.exists("log."+str(i)):
+      os.remove("log."+str(i))
+    i += -1
+    while i>0:
+      if os.path.exists("log."+str(i)):
+        os.rename("log."+str(i), "log."+str(i+1))
+      i += -1
+    if os.path.exists("log"):
+      os.rename("log", "log.1")
+
+  # logprint(string) will write a timestamped string to the log, and to STDOUT
+  def logprint(self, string, PRINT=True):
+    writestr = "["+time.asctime()+"] "+string+"\n"
+    f = open("log",'a')
+    f.write(writestr)
+    f.close()
+    print(writestr, end='')
 
 
 class job:
-  def __init__(self, n, Natoms, Nkrylov, ReCn, ImCn, xyzpath, pjob, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, SCHEDULER=False):
+  def __init__(self, n, Natoms, Nkrylov, ReCn, ImCn, xyzpath, pjob, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False):
     self.n = n
     self.Natoms = Natoms
     self.Nkrylov = Nkrylov
@@ -124,6 +150,7 @@ class job:
     self.ndets = 0
     self.restarts = 0
     self.gradjob = False
+    self.logger = logger
 
   def start(self):
     p = subprocess.Popen( 'bash '+self.dir+'tdci.job', shell=True)
@@ -155,11 +182,11 @@ class job:
       self.make_fieldfiles()
     if (self.n==0 or self.gradjob):
       search_replace_file(self.dir+tempname, "tdci_diabatize_orbs yes", "tdci_diabatize_orbs no")
-      if type(self.ReCn) == type(None):
+      if self.ReCn is None:
         search_replace_file(self.dir+tempname, "tdci_recn_readfile recn_init.bin", "")
       else:
         write_bin_array(self.ReCn,self.dir+"recn_init.bin")
-      if type(self.ImCn) == type(None):
+      if self.ImCn is None:
         search_replace_file(self.dir+tempname, "tdci_imcn_readfile imcn_init.bin", "")
       else:
         write_bin_array(self.ImCn,self.dir+"imcn_init.bin")
@@ -172,11 +199,11 @@ class job:
       pjobd = self.pjob.dir
       shutil.copy(pjobd+"/NewCoors.bin", self.dir+"/PrevCoors.bin")
       shutil.copy(pjobd+"/NewC.bin", self.dir+"/PrevC.bin")
-      if type(self.ReCn) == type(None):
+      if self.ReCn is None:
         shutil.copy(pjobd+"/ReCn_end.bin", self.dir+"/recn_init.bin")
       else:
         write_bin_array(self.ReCn,self.dir+"recn_init.bin")
-      if type(self.ImCn) == type(None):
+      if self.ImCn is None:
         shutil.copy(pjobd+"/ImCn_end.bin", self.dir+"/imcn_init.bin")
       else:
         write_bin_array(self.ImCn,self.dir+"imcn_init.bin")
@@ -204,19 +231,20 @@ class job:
       write_bin_array(vals,self.dir+"field"+str(i)+".bin")
 
   def check_output(self,output):
+    logprint = self.logger.logprint
     outputgood = True
     norm = np.linalg.norm(output["recn"])**2 + np.linalg.norm(output["imcn"])**2
-    print("Final wfn norm (MO basis): "+str(norm))
+    logprint("Final wfn norm (MO basis): "+str(norm))
     if ((norm<0.7) or (norm>1.1) or (np.isnan(norm))):
-      print("ERROR: Norm out of bounds")
+      logprint("ERROR: Norm out of bounds")
       outputgood = False
-    print("Sum of gradient elements: "+str(np.sum(output["grad"])))
+    logprint("Sum of gradient elements: "+str(np.sum(output["grad"])))
     if (np.isnan(np.sum(output["grad"]))):
-      print("ERROR: nan in gradient")
+      logprint("ERROR: nan in gradient")
       outputgood = False
     if self.FIELD_INFO["krylov_end"]:
       norm = np.sum(output["recn_krylov"]**2) + np.sum(output["imcn_krylov"]**2)
-      print("Final wfn norm (AES basis): "+str(norm))
+      logprint("Final wfn norm (AES basis): "+str(norm))
       krylov_MO_Re = np.matmul(np.transpose(output["krylov_states"]), output["recn_krylov"])
       krylov_MO_Im = np.matmul(np.transpose(output["krylov_states"]), output["recn_krylov"])
       #print("Checking AES basis quality:")
@@ -229,7 +257,7 @@ class job:
       #print("ImCn (AES->MO):")
       #print(krylov_MO_Im)
       overlap = np.dot(krylov_MO_Re,output["recn"])**2 + np.dot(krylov_MO_Im,output["imcn"])**2
-      print("Overlap of AES-MO with MO:"+str(overlap))
+      logprint("Overlap of AES-MO with MO:"+str(overlap))
     if outputgood:
       return True
     else:
@@ -237,13 +265,14 @@ class job:
 
 
   def run_safely(self):
+    logprint = self.logger.logprint
     # Run the job
     retries = 0
     while (retries < 3):
       self.clean_files()
       self.make_files()
       p = self.start()
-      print("Started "+str(self.dir)+"\n")
+      logprint("Started "+str(self.dir)+"\n")
       finished = False
       # Periodically check if the process is finished
       i = 1
@@ -272,14 +301,14 @@ class job:
       else: # normal tdci
 	output = self.output()
       if output: # Everything checks out!
-        print("Output looks good!")
+        logprint("Output looks good!")
         return output
       else: # Outputs bad, try redoing the job!
-        print("Output is bad. Restarting the job. See bad jobfiles in ./badjobs/"+str(self.n)+"_"+str(retries))
+        logprint("Output is bad. Restarting the job. See bad jobfiles in ./badjobs/"+str(self.n)+"_"+str(retries))
         makedirs("./badjobs/"+str(self.n)+"_"+str(retries))
         shutil.copytree( self.dir, "badjobs/"+str(self.n)+"_"+str(retries))
       retries+=1
-    print("Went through 3 retries and output is still bad T_T\n")
+    logprint("Went through 3 retries and output is still bad T_T\n")
     return output
 
       
@@ -299,6 +328,7 @@ class job:
   # For ndets, ["Number", "of", "determinants:"]
   # pos : the index of the element to be returned from matching line.split()
   def scan_outfile(self, key, pos):
+    logprint = self.logger.logprint
     f = open(self.dir+"test"+str(self.n)+".out", 'r')
     l = f.readline()
     while l != "":
@@ -306,16 +336,17 @@ class job:
         if (l.split()[:len(key)] == key):
           return l.split()[pos]
       l = f.readline()
-    print("key "+str(key)+" not found :( ")
+    logprint("key "+str(key)+" not found :( ")
     return None
 
   def gradoutput(self):
+    logprint = self.logger.logprint
     filesgood = True
     files = ["gradinit.bin", "States_Cn.bin", "States_E.bin", "misc.bin"]
     for fn in files:
       if not os.path.exists(self.dir+fn):
         filesgood = False
-        print("ERROR: "+fn+" missing")
+        logprint("ERROR: "+fn+" missing")
     if not filesgood:
       return False
     grad = read_bin_array(self.dir+"gradinit.bin", 3*self.Natoms)
@@ -342,6 +373,7 @@ class job:
 
 
   def read_hessfile(self, filepath):
+    logprint = self.logger.logprint
     natoms = self.Natoms
     # 2*sizeof(int)+sizeof(double)+natoms*sizeof(double4);
     nbytes = 2*4+8+(natoms)*(4*8)
@@ -353,7 +385,7 @@ class job:
     third = f.read((3*3*natoms)*8)
     rest = f.read()
     if len(rest) != 0:
-      print("ERROR: Extra bytes in Hessian.bin, something isn't right...")
+      logprint("ERROR: Extra bytes in Hessian.bin, something isn't right...")
     #print( (len(first),len(second),len(third),len(rest)))
     hessian = np.array(struct.unpack('d'*((3*natoms)**2), second))
     hessian.resize((3*natoms,3*natoms))
@@ -362,14 +394,15 @@ class job:
     return {"hessian": hessian, "dipolederiv": dipolederiv}
 
   def output(self):
+    logprint = self.logger.logprint
     filesgood = True
-    files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "misc.bin"]
+    files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin"]
     if self.FIELD_INFO["krylov_end"]:
       files += ["ReCn_krylov_end.bin", "ImCn_krylov_end.bin", "Cn_krylov_end.bin", "E_krylov_end.bin", "tdcigrad_krylov.bin"]
     for fn in files:
       if not os.path.exists(self.dir+fn):
         filesgood = False
-        print("ERROR: "+fn+" missing")
+        logprint("ERROR: "+fn+" missing")
     if not filesgood:
       return False
 
@@ -378,6 +411,8 @@ class job:
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
     grad = read_bin_array(self.dir+"tdcigrad.bin", 3*self.Natoms)
     grad.resize((self.Natoms, 3))
+    grad_half = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
+    grad_half.resize((self.Natoms, 3))
     krylov_states = None
     krylov_energies = None
     krylov_gradients = None
@@ -402,6 +437,7 @@ class job:
                "imcn": imcn,  # 1d array, number of determinants
                "eng": eng,    # float, Energy of current wfn
                "grad": grad,    # 2d array, Natoms x 3 dimensions.
+               "grad_half": grad,    # 2d array, Natoms x 3 dimensions.
                "recn_krylov": recn_krylov,      # 1d array, 2*krylov_sub_n
                "imcn_krylov": imcn_krylov,      # 1d array, 2*krylov_sub_n
                "krylov_states": krylov_states,  # 2d array of CI vectors of each approx eigenstate
@@ -419,36 +455,37 @@ class job:
       return False
 
   def sanity_test(self, output):
-    print("Sanity test on output...")
+    logprint = self.logger.logprint
+    logprint("Sanity test on output...")
     Cn_approx_end = None
     Qt_end = None
     if (os.path.exists(self.dir+"Cn_approx_end.bin")) and (os.path.exists(self.dir+"Qt_end.bin")):
-      print("Extra debug files present:")
+      logprint("Extra debug files present:")
       Cn_approx_end = read_bin_array(self.dir+"Cn_approx_end.bin", self.Nkrylov**2)
       Cn_approx_end.resize((self.Nkrylov,self.Nkrylov))
       Qt_end = read_bin_array(self.dir+"Qt_end.bin", self.Nkrylov*self.ndets)
       Qt_end.resize((self.Nkrylov,self.ndets))
       Cn_krylov = np.matmul(Cn_approx_end, Qt_end)
       if np.allclose(Cn_krylov, output["krylov_states"]):
-        print("Pass! Cn_approx_end * Qt_end = krylov_states")
+        logprint("Pass! Cn_approx_end * Qt_end = krylov_states")
       else:
-        print("Fail! Cn_approx_end * Qt_end != krylov_states")
+        logprint("Fail! Cn_approx_end * Qt_end != krylov_states")
     else:
-      print("Extra debug files not present.")
+      logprint("Extra debug files not present.")
     if np.allclose(np.matmul(output["krylov_states"],output["recn"]),output["recn_krylov"]):
-      print("Pass! recn_krylov == krylov_states * recn")
+      logprint("Pass! recn_krylov == krylov_states * recn")
     else:
-      print("Fail! recn_krylov != krylov_states * recn")
+      logprint("Fail! recn_krylov != krylov_states * recn")
 
     import pickle
     with open("data.pickle", 'wb') as f:
       pickle.dump([Cn_approx_end, Qt_end, output], f, pickle.HIGHEST_PROTOCOL)
-    print("Sanity test finished.")
+    logprint("Sanity test finished.")
       
 
 
 class tccontroller:
-  def __init__(self, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, SCHEDULER=False):
+  def __init__(self, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False):
     self.N = 0
     self.jobs = []
     self.prevjob = None
@@ -459,6 +496,7 @@ class tccontroller:
     self.FIELD_INFO=FIELD_INFO
     self.Natoms = None
     self.Nkrylov = 2*FIELD_INFO["krylov_end_n"]
+    self.logger = logger
 
   def grad(self, xyzpath, ReCn=None, ImCn=None):
     if self.N == 0:
@@ -472,11 +510,12 @@ class tccontroller:
     #grad_template["casgradmult"] = "1 1 1"
     #grad_template["casgradstate"] = "0 1 2"
     grad_template["tdci_grad_init"] = "yes"
+    grad_template["tdci_grad_half"] = "no"
     grad_template["tdci_fstrength"] = "0.0"
     grad_template["tdci_simulation_time"] = "0.01"
     grad_template["tdci_nstep"] = "1"
     grad_template["tdci_krylov_end"] = "no"
-    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, self.SCHEDULER)
+    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.gradjob = True
     j.dir = self.JOBDIR+"electronic/grad/"
     return j.run_safely()
@@ -489,7 +528,7 @@ class tccontroller:
     hess_template = copy.deepcopy(self.TDCI_TEMPLATE)
     hess_template["run"] = "frequencies"
     hess_template["to"] = str(temp)
-    j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, self.SCHEDULER)
+    j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.dir = self.JOBDIR+"electronic/hessian"+str(self.N)+"/"
     return j.run_safely()
     
@@ -501,9 +540,9 @@ class tccontroller:
       f = open(xyzpath, 'r')
       self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
       f.close();del f
-      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, self.SCHEDULER)
+      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     else:
-      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, self.jobs[-1], self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, self.SCHEDULER)
+      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, self.jobs[-1], self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     self.jobs.append(j)
     self.N+=1
     return j.run_safely()
