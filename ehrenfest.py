@@ -16,6 +16,8 @@ import h5py
 # $ HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/
 # $ pip2 install h5py
 
+RESTART = False
+
 ########################################
 # Job Template
 ########################################
@@ -46,42 +48,44 @@ f.close()
 autimetosec = 2.4188843265857e-17
 
 # Dynamics time step in atomic units
-delta = 10
+delta = 5
 
 # TDCI simulation time in femtoseconds
-tdci_simulation_time = delta * autimetosec * 1e15 # fs/s
+tdci_simulation_time = (delta/1.0) * autimetosec * 1e15 # fs/s
 
 # TDCI number of time steps
-nstep = 1000
+nstep = 8000
 
 ########################################
 # TDCI TeraChem Template
 ########################################
 
 nfields = 1                    # number of distinct fields (generally for multichromatic floquet)
-krylov_end = True              # Generate approximate eigenstates at end of calculation?
+krylov_end = False              # Generate approximate eigenstates at end of calculation?
 krylov_end_n = 6              # Number of steps to save wfn on to generate approx eigenstates with.
                                # There will be 2*krylov_end_n approximate eigenstates returned.
 krylov_end_interval = 20       # Number of steps between saved steps.
 TDCI_TEMPLATE = {
   "gpus"                 : "1 0",
   "precision"            : "double",
-  "threall"              : "1.0e-20",
-  "convthre"             : "1.0e-6",
-  "basis"                : "3-21g",
+  #"threall"              : "1.0e-20",
+  #"convthre"             : "1.0e-6",
+  #"basis"                : "6-311++g[2d,2p]",
+  "basis"                : "sto-3g",
   "coordinates"          : "coords.xyz", # <-- don't change this
   "method"               : "hf",
   "run"                  : "tdci", # <-- don't change this
   "charge"               : "0",
   "spinmult"             : "1",
   "csf_basis"            : "no",
+  "sphericalbasis"       : "no", # sometimes this fixes norm problems, sometimes it causes them!
   "tdci_simulation_time" : str(tdci_simulation_time),
   "tdci_nstep"           : str(nstep),
   "tdci_eshift"          : "gs",
   "tdci_stepprint"       : "1",
   "tdci_nfields"         : str(nfields),
-  "tdci_laser_freq"      : "3.018721363175e+15", # "2.5311296E+15",
-  "tdci_photoneng"       : "0.45879422",         # "0.38467766",
+  "tdci_laser_freq"      : "0.0",
+  "tdci_photoneng"       : "0.0",
   "tdci_fstrength"       : "0.0E+16",
   "tdci_fdirection"      : "x",
   "tdci_ftype"           : "cw",
@@ -89,25 +93,41 @@ TDCI_TEMPLATE = {
   "tdci_write_field"     : "no",
   "tdci_floquet"         : "no",
   "tdci_floquet_photons" : "4",
+  #"cisno"                : "yes",
+  #"cisnostates"          : "6",
+  #"cisnumstates"         : "6",
+  #"cisguessvecs"         : "8",
+  #"cismaxiter"           : "500",
+  #"cisconvtol"           : "1.0e-8",
+  "cpcisiter"            : "350",
   "fon"                  : "yes",
   "fon_method"           : "gaussian",
-  "fon_temperature"      : "0.25",
-  "fon_mix"              : "no",
-  #"casscf"               : "yes",
-  "casci"                : "yes",
+  "fon_temperature"      : "0.125",
+  #"fon_mix"              : "no",
+  #"casscf"               : "no",
+  "casci"                : "yes",  # no if using CISNO or CASSCF
   "ci_solver"            : "direct",
   "dcimaxiter"           : "300",
   "dciprintinfo"         : "yes",
   "dcipreconditioner"    : "orbenergy",
-  "closed"               : "6",
-  "active"               : "4",
-  "cassinglets"          : "8",
+  #"closed"               : "18",
+  #"active"               : "6",
+  #"closed"               : "6",   # Ethylene 4/4
+  #"active"               : "4",
+  #"closed"               : "4", # Ethylene 8/8
+  #"active"               : "8", 
+  #"closed"               : "7", # Ethylene 2/2
+  #"active"               : "2", 
+  "closed"               : "0",
+  "active"               : "7",
+  "cassinglets"          : "3",
   "castriplets"          : "0",
-  "cascharges"           : "yes",
-  "cas_ntos"             : "yes",
+  "cascharges"           : "no", # Turning extra analyses off to save time
+  "cas_ntos"             : "no",
+  "cphfiter"             : "300", # MaxIters for cpXhf gradient calculation
   "tdci_gradient"        : "yes",  # <-- don't change this
   "tdci_gradient_half"   : "yes",  # <-- don't change this
-  "tdci_fieldfile0"      : "field0.bin",
+  "tdci_fieldfile0"      : "field0.bin", # <-- don't change this
 
   # orbital options
   #"fon"                  : "yes",
@@ -120,7 +140,6 @@ TDCI_TEMPLATE = {
   "tdci_krylov_end_interval": krylov_end_interval,
 
   # These options will be removed on first step, don't change them.
-  #"tdci_krylov_init"     : ("cn_krylov_init.bin" if krylov_end else "no"),
   "tdci_diabatize_orbs"  : "yes",
   "tdci_recn_readfile"   : "recn_init.bin",
   "tdci_imcn_readfile"   : "imcn_init.bin",
@@ -138,12 +157,10 @@ if krylov_end:
 # External field
 ########################################
 
-# Field file should include values for half-steps, so the length of the array
-#   should be 2*nsteps!
-
 # Depending on the external field you want, you might have to write some
 #   code here to generate the waveform, below is a CW tuned to ethylene
 #   Function should accept np.arrays in units of AU time and return AU E-field units.
+#   This function then gets fed to tccontroller to generate the field on different TDCI steps
 def f0_values(t):
   EPSILON_C = 0.00265316
   E_FIELD_AU = 5.142206707E+11
@@ -151,7 +168,7 @@ def f0_values(t):
   E_strength_Wm2 = 1.0E+16 # In W/m^2
   E_str = (np.sqrt(2.0*E_strength_Wm2 / EPSILON_C) )/E_FIELD_AU  # transform to au field units
   field_freq_hz = 3.444030610581e+15 # tuned to S0 <-> S1 for rabi flop example
-#  return E_str*np.sin(2.0*np.pi * field_freq_hz*HZtoAU * t)
+  #return E_str*np.sin(2.0*np.pi * field_freq_hz*HZtoAU * t)
   return 0 * t   # Field is temporarily off
 
 FIELD_INFO = { "tdci_simulation_time": tdci_simulation_time,
@@ -231,7 +248,7 @@ def tc_grad(tc, atoms, masses, coords, ReCn=None, ImCn=None, return_states=False
 
   print("gradnorm: "+str(norm))
   # Get forces (Hartree/Bohr)
-  forces = - (grad/norm)
+  forces = -(grad/norm)
   print(forces)
 
   # Get accelerations
@@ -257,10 +274,13 @@ def tc_grad(tc, atoms, masses, coords, ReCn=None, ImCn=None, return_states=False
 # Returns accelerations
 ########################################
 
-def getAccel(grad):
+def getAccel(grad, ReCn, ImCn):
 
+  norm = np.sum( np.array(ReCn)**2 )
+  if ImCn is not None:
+    norm += np.sum( np.array(ImCn)**2 )
   # Get forces (Hartree/Bohr)
-  accs = -grad
+  accs = -(grad/norm)
   # Get accelerations
   for a, mass in zip(accs, masses):
     a /= mass
@@ -268,69 +288,6 @@ def getAccel(grad):
 
   # Return accelerations
   return accs
-
-
-def tc_prop_and_grad(tc, atoms, masses, coords, ReCn=None, ImCn=None):
-
-  # Print begin
-  print("")
-  print("###############################")
-  print("######## TERACHEM BEGIN #######")
-  print("###############################")
-  print("")
-
-  # Temprorary xyz filename
-  xyzfilename = "temp.xyz"
-
-  # Write xyz file
-  xyz_write(atoms, coords, xyzfilename)
-
-  # Call TeraChem
-  """
-    Dictionary keys in nextstep output:
-	     "recn"              - 1d array, number of determinants (ndets)
-	     "imcn"              - 1d array, ndets
-	     "eng"               - float, Energy of current wfn
-	     "grad"              - 2d array, Natoms x 3 dimensions.
-	     "grad_half"         - 2d array, Natoms x 3 dimensions.
-	     "recn_krylov"       - 1d array, 2*krylov_end_n
-	     "imcn_krylov"       - 1d array, 2*krylov_end_n
-	     "krylov_states"     - 2d array Approx Eigenstates in MO basis. 2*krylov_end_n x ndets
-	     "krylov_energies"   - 1d array of energies of each approx eigenstate
-	     "krylov_gradients"  - 3d array of approx eigenstate gradients, Napprox x Natoms x 3dim
-
-    INPUT:
-	      xyz                - string, path of xyz file.
-	      ReCn (optional)    - Real component of CI vector. If none, ground state is used. 
-	      ImCn (optional)    - Imaginary component of CI vector.
-  """
-  if (ReCn is None):
-    TCdata = tc.nextstep(xyzfilename)
-  else: # For inital conditions
-    TCdata = tc.nextstep(xyzfilename, ReCn, ImCn)
-  print("")
-
-  # Get forces (Hartree/Bohr)
-  forces = - TCdata['grad']
-  print(forces)
-
-  # Get accelerations
-  accs = np.copy(forces)
-  for a, mass in zip(accs, masses):
-    a /= mass
-
-  # Get energy
-  en = float(TCdata['eng'])
-
-  # Print end
-  print("")
-  print("###############################")
-  print("######### TERACHEM END ########")
-  print("###############################")
-  print("")
-
-  # Return accelerations
-  return (accs, en)
 
 ########################################
 # Masses initialization
@@ -380,10 +337,13 @@ def kincalc(masses, vs):
 # h5py
 ########################################
 # time in attoseconds
-def h5py_update(geom, vels, accs, poten, kinen, time):
+def h5py_update(geom, vels, accs, poten, kinen, Time, atoms=None):
 
   # Get array dimension
   n = geom.shape[0]
+  ndets = 0
+  #if ReCn is not None:
+  #  ndets = len(ReCn)
 
   # Open h5py file
   h5f = h5py.File('data.hdf5', 'a')
@@ -391,6 +351,10 @@ def h5py_update(geom, vels, accs, poten, kinen, time):
   # Create datasets
   if len(list(h5f.keys())) == 0 :
     print('Creating datasets')
+    #h5f.create_dataset('atoms', (1,n), maxshape=(1,n), dtype=h5py.string_dtype('utf-8',30))
+    #h5f['atoms'] = atoms
+    #h5f.create_dataset('last_recn', (1, ndets), maxshape=(1, ndets), dtype='float64')
+    #h5f.create_dataset('last_imcn', (1, ndets), maxshape=(1, ndets), dtype='float64')
     h5f.create_dataset('geom', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
     h5f.create_dataset('vels', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
     h5f.create_dataset('accs', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
@@ -399,7 +363,7 @@ def h5py_update(geom, vels, accs, poten, kinen, time):
     h5f.create_dataset('time', (0,), maxshape=(None,), dtype='float64')
 
   # Resize
-  for key in h5f.keys():
+  for key in ['geom','vels','accs','poten','kinen','time']:
     dset = h5f[key]
     dset.resize(dset.len() + 1, axis=0)
 
@@ -409,13 +373,28 @@ def h5py_update(geom, vels, accs, poten, kinen, time):
   h5f['accs'][-1] = accs
   h5f['poten'][-1] = poten
   h5f['kinen'][-1] = kinen
-  h5f['time'][-1] = time
-
+  h5f['time'][-1] = Time
+  # why doesnt this work :)
+  """
+  if ReCn is not None:
+    h5recn = h5f['last_recn']
+    print(h5recn)
+    for i in range(0,ndets):
+      h5recn[i] = ReCn[i]
+  if ImCn is not None:
+    h5imcn = h5f['last_imcn']
+    for i in range(0,ndets):
+      h5imcn[i] = ImCn[i]
+  """
   # Close
   h5f.close()
+  # had an error earlier when the h5 file was opened again before it was finished closing
+  # think that might be due to filesystem lag or something idk so here's a sleep
+  time.sleep(2)
 
 def h5py_printall():
 
+  time.sleep(2)
   # Open h5py file
   h5f = h5py.File('data.hdf5', 'r')
 
@@ -496,98 +475,129 @@ logprint("Initializing tccontroller\n")
 tc = tccontroller.tccontroller(JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE,
                                FIELD_INFO, logger=l, SCHEDULER=False)
 
-# Geometry file name
-geomfilename = "ethylene.xyz"
-logprint("Geometry file: " + geomfilename)
+atoms = None
+x_curr = None
+v_curr = None
+a_curr = None
+pe_curr = None
+ke_curr = None
+initial_recn = None
+initial_imcn = None
 
-# Read geometry file
-logprint("Reading geometry file")
-atoms, cs_curr = xyz_read(geomfilename)
+if RESTART:
+  h5f = h5py.File('data.hd5f','r')
+  fields = ['atoms', 'geom','vels','accs','poten','kinen','time']
+  for field in fields:
+    if field not in h5f.keys():
+      print("h5 file uninitialized")
+      os.kill()
+  atoms = h5py['atoms']
+  x_curr = h5py['geom'][-1]
+  v_curr = h5py['geom'][-1]
+  a_curr = h5py['geom'][-1]
+  pe_curr = h5py['geom'][-1]
+  ke_curr = h5py['geom'][-1]
+  t = h5py['time'][-1]
+  recn = h5py['last_recn']
+  imcn = h5py['last_imcn']
+  tc.N = len(h5py['geom'])
 
-# Initial time
-time = 0
+else: # intialize normally
+  # Geometry file name
+  #geomfilename = "benzene.xyz"
+  #geomfilename = "ethylene.xyz"
+  geomfilename = "h2o.xyz"
+  logprint("Geometry file: " + geomfilename)
 
-# Get masses
-logprint("Getting masses")
-masses = getmasses(atoms)
+  # Read geometry file
+  logprint("Reading geometry file")
+  atoms, cs_curr = xyz_read(geomfilename)
 
-# Convert coordinates from Angstroms to au
-xs_curr = cs_curr / bohrtoangs
+  # Initial time
+  # 'time' is the name of a module
+  t = 0
 
-# Initialize velocities
-logprint("Initializing velocities")
-vs_curr = np.zeros([len(atoms), 3])
+  # Get masses
+  logprint("Getting masses")
+  masses = getmasses(atoms)
 
-# AD: TODO: some optimization can be done here
-#     right now tc.grad expects an arbitrary CI vector (or defaults to S0)
-#     That means if we want S1 initial conditions, we have to call TC to solve states
-#     and THEN feed one of those states back into tc.grad... not efficient.
-#     If we add some more params to terachem, we can do this in one call
+  # Convert coordinates from Angstroms to au
+  x_curr = cs_curr / bohrtoangs
 
-# Get states for inital conditions
-gradout = tc.grad(geomfilename) 
-#initial_recn = gradout["states"][1]
-initial_recn = gradout["states"][0]
+  # Initialize velocities
+  logprint("Initializing velocities")
+  v_curr = np.zeros([len(atoms), 3])
 
-# Initialize accelerations
-logprint("Initializing accelerations")
-as_curr, pe_curr = tc_grad(tc, geomfilename, masses, cs_curr, ReCn=initial_recn)
+  # AD: TODO: some optimization can be done here
+  #     right now tc.grad expects an arbitrary CI vector (or defaults to S0)
+  #     That means if we want S1 initial conditions, we have to call TC to solve states
+  #     and THEN feed one of those states back into tc.grad... not efficient.
+  #     If we add some more params to terachem, we can do this in one call
 
-# Calculate initial kinetic energy
-logprint("Calculating initial kinetic energy")
-ke_curr = kincalc(masses, vs_curr)
+  # Get states for inital conditions
+  gradout = tc.grad(geomfilename) 
+  initial_recn = gradout["states"][0]
 
-# Store inital state in HDF5
-logprint("Storing intial state in HDF5")
-h5py_update(xs_curr, vs_curr, as_curr, pe_curr, ke_curr, time)
-logprint("")
+  # Initialize accelerations
+  logprint("Initializing accelerations")
+  a_curr, pe_curr = tc_grad(tc, geomfilename, masses, cs_curr, ReCn=initial_recn)
+
+  # Calculate initial kinetic energy
+  logprint("Calculating initial kinetic energy")
+  ke_curr = kincalc(masses, v_curr)
+
+  # Store inital state in HDF5
+  logprint("Storing intial state in HDF5")
+  if os.path.exists("data.hdf5"):
+    os.remove("data.hdf5")
+  h5py_update(x_curr, v_curr, a_curr, pe_curr, ke_curr, t, atoms=atoms)
+  logprint("")
 
 # Main dynamics loop
-for it in range(1, 10000):
+for it in range(0, 10000):
 
   # Log iteration start
   logprint("Iteration " + str(it).zfill(4) + " started")
 
   # Calculate next geometry
   logprint("Calculating next geometry")
-  xs_next = xs_curr + vs_curr * delta + as_curr * delta**2 / 2
+  x_next = x_curr + v_curr * delta + a_curr * delta**2 / 2
 
   # Propagate electronic wavefunction to next time step
   logprint("Propagating electronic wavefunction to next time step using next coordinates")
   TCdata = None
-  xyz_write(atoms, xs_next*bohrtoangs, "temp.xyz")
-  if (it == 1):
-    TCdata = tc.nextstep("temp.xyz", ReCn=initial_recn, ImCn=None)
+  xyz_write(atoms, x_next*bohrtoangs, "temp.xyz")
+  if (it == 0 and not RESTART):
+    TCdata = tc.nextstep("temp.xyz", ReCn=initial_recn, ImCn=initial_imcn)
   else:
     TCdata = tc.nextstep("temp.xyz")
 
   # Calculate acceleration from gradient at half time-step.
-  as_next = getAccel(TCdata["grad_half"])
+  a_next = getAccel(TCdata["grad_half"], TCdata["recn"], TCdata["imcn"])
   pe_next = float(TCdata['eng'])
-
 
   # Calculate next velocities
   logprint("Calculating next velocities")
-  vs_next = vs_curr + (as_curr + as_next) * delta / 2
+  v_next = v_curr + (a_curr + a_next) * delta / 2
 
   # Calculate next kinetic energy
   logprint("Calculating next kinetic energy")
-  ke_next = kincalc(masses, vs_next)
+  ke_next = kincalc(masses, v_next)
 
-  time += delta * autimetosec * 1e+18 # Time in Attoseconds
+  t += delta * autimetosec * 1e+18 # Time in Attoseconds
 
   # Update HDF5
   logprint("Updating HDF5")
-  h5py_update(xs_next, vs_next, as_next, pe_next, ke_next, time)
+  h5py_update(x_next, v_next, a_next, pe_next, ke_next, t)
 
   # Print HDF5 contents
   logprint("Printing HDF5 contents")
   h5py_printall()
 
   # Update current
-  xs_curr = xs_next
-  vs_curr = vs_next
-  as_curr = as_next
+  x_curr = x_next
+  v_curr = v_next
+  a_curr = a_next
   pe_curr = pe_next
   ke_curr = ke_next
 
@@ -598,15 +608,15 @@ for it in range(1, 10000):
 
 # Write final geometry
 logprint("Writing final geometry")
-xyz_write(atoms, xs_next * bohrtoangs, "final.xyz")
+xyz_write(atoms, x_next * bohrtoangs, "final.xyz")
 
 # Write final velocities
 logprint("Writing final velocities")
-xyz_write(atoms, vs_next, "final.vel")
+xyz_write(atoms, v_next, "final.vel")
 
 # Write final accelerations
 logprint("Writing final accelerations")
-xyz_write(atoms, as_next, "final.acc")
+xyz_write(atoms, a_next, "final.acc")
 
 # Print HDF5 contents
 logprint("Printing HDF5 contents")

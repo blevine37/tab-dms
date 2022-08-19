@@ -10,6 +10,8 @@ FStoAU = 41.341375
 EPSILON_C = 0.00265316
 E_FIELD_AU = 5.142206707E+11
 
+np.set_printoptions(precision=4)
+np.set_printoptions(linewidth=np.inf)
 
 # TCPB uses what im calling "tcstring" 
 def tcstring_to_xyz(atoms,geom,filename):
@@ -132,6 +134,45 @@ class logger():
     print(writestr, end='')
 
 
+class molden:
+  def __init__(self, filename, clsd, acti):
+    self.filename = filename
+    self.lines = []
+    f = open(filename, 'r')
+    for line in f: self.lines.append(line)
+    f.close(); del f
+    self.clsd = clsd
+    self.acti = acti
+    self.dissect()
+    self.write_activeMOs(clsd,acti)
+
+  # separate parts of the molden file
+  def dissect(self):
+    i=0
+    while "[MO]" not in self.lines[i]:
+     i+=1
+    self.header = self.lines[0:i]
+    #print("header:\n")
+    #print(self.header)
+    self.MOs = []
+    for j in range(0,len(self.lines)):
+      if "Ene=" in self.lines[j]:
+        self.MOs.append(j)
+
+  def write_activeMOs(self, clsd, acti):
+    f = open("/".join(self.filename.split("/")[0:-1])+"/tdciactive.molden",'w')
+    for line in self.header:
+      f.write(line)
+    mo_len = self.MOs[1]-self.MOs[0]
+    for i in range(clsd, clsd+acti):
+      for j in range(0,mo_len):
+        #print(i)
+        #print((len(self.lines),self.MOs[i],j))
+        f.write(self.lines[self.MOs[i]+j])
+    f.close()
+
+    
+
 class job:
   def __init__(self, n, Natoms, Nkrylov, ReCn, ImCn, xyzpath, pjob, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False):
     self.n = n
@@ -143,14 +184,15 @@ class job:
     self.pjob = pjob
     self.dir = JOBDIR+"electronic/"+str(n)+"/"
     self.JOBDIR=JOBDIR
-    self.JOB_TEMPLATE=JOB_TEMPLATE
-    self.TDCI_TEMPLATE=TDCI_TEMPLATE
-    self.SCHEDULER=SCHEDULER
+    self.JOB_TEMPLATE=JOB_TEMPLATE # path to the bash script that runs tc (with tempdir and tempname)
+    self.TDCI_TEMPLATE=TDCI_TEMPLATE # dictionary of terachem options written to input file
+    self.SCHEDULER=SCHEDULER # Unimplemented: will interface with standard scheduler 
     self.FIELD_INFO = FIELD_INFO
     self.ndets = 0
     self.restarts = 0
     self.gradjob = False
     self.logger = logger
+    self.clean_files()
 
   def start(self):
     p = subprocess.Popen( 'bash '+self.dir+'tdci.job', shell=True)
@@ -280,6 +322,7 @@ class job:
       print(status, end=""); sys.stdout.flush()
       while not finished:
         if self.check_status(p):
+          print(""); sys.stdout.flush()
           finished = True
         else: # fun rotating dots
           if (i%10 == 0):
@@ -339,6 +382,33 @@ class job:
     logprint("key "+str(key)+" not found :( ")
     return None
 
+  def scan_normpop(self):
+    logprint = self.logger.logprint
+    if not os.path.exists(self.dir+"Pop"):
+      logprint("file Pop does not exist.")
+    if not os.path.exists(self.dir+"norm"):
+      logprint("file norm does not exist.")
+    f = open(self.dir+"Pop",'r')
+    l = f.readline()
+    S0_start = float(l.split(",")[1])
+    lp = None
+    while l != "":
+      lp = l
+      l = f.readline()
+    # lp should be last line of Pop
+    S0_end = float(lp.split(",")[1])
+    f.close()
+    g = open(self.dir+"norm",'r')
+    l = g.readline()
+    norm_start = float(l.split(",")[1])
+    lp = None
+    while l != "":
+      lp = l
+      l = g.readline()
+    norm_end = float(lp.split(",")[1])
+    g.close()
+    return S0_start, S0_end, norm_start, norm_end
+
   def gradoutput(self):
     logprint = self.logger.logprint
     filesgood = True
@@ -395,8 +465,11 @@ class job:
 
   def output(self):
     logprint = self.logger.logprint
+    clsd, acti = int(self.TDCI_TEMPLATE["closed"]), int(self.TDCI_TEMPLATE["active"])
     filesgood = True
-    files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin"]
+    files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin", "tdci.molden"]
+    if (self.n > 0) and (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
+      files += ["S_MIXED_MO_active.bin", "S_MIXED_MO_postdiab.bin"]
     if self.FIELD_INFO["krylov_end"]:
       files += ["ReCn_krylov_end.bin", "ImCn_krylov_end.bin", "Cn_krylov_end.bin", "E_krylov_end.bin", "tdcigrad_krylov.bin"]
     for fn in files:
@@ -408,6 +481,11 @@ class job:
 
     if (self.ndets == 0):
       self.readmisc()
+    # rewrites the molden file with just the active orbitals
+    moldenwriter = molden(self.dir+"tdci.molden", clsd, acti)
+    del moldenwriter 
+    
+    # Format output structure
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
     grad = read_bin_array(self.dir+"tdcigrad.bin", 3*self.Natoms)
     grad.resize((self.Natoms, 3))
@@ -448,6 +526,45 @@ class job:
     #print("TDCI job Output:\n")
     #print(output)
 
+    # Check overlap matrices
+    printS = False
+    S_prediab = None
+    S_postdiab = None
+    if self.n > 0:
+      # Error analysis
+      # tdci end energy is in 'eng'
+      eng_tdci_start = float(self.scan_outfile(["Initial", "energy:"], 2))
+      prevstep_end_eng = float(self.pjob.scan_outfile(["Final", "TDCI", "Energy:"], 3))
+      diaberr = 27.2114*(eng_tdci_start - prevstep_end_eng)
+      tdcierr = 27.2114*(eng - eng_tdci_start)
+      logprint("Error diab ("+str(self.n-1)+"  -> "+str(self.n)+"  ): "+"{: .8f}".format(diaberr)+" eV")
+      logprint("Error tdci ("+str(self.n)+"i -> "+str(self.n)+"f ): "+"{: .8f}".format(tdcierr)+" eV")
+      if diaberr > 0.5: printS = True
+      if (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
+        printS = True
+        S_prediab = read_bin_array(self.dir+"S_MIXED_MO_active.bin", acti**2)
+        S_prediab.resize((acti,acti))
+        S_postdiab = read_bin_array(self.dir+"S_MIXED_MO_postdiab.bin", acti**2)
+        S_postdiab.resize((acti,acti))
+        for i in range(0,acti):
+          if S_prediab[i][i] < 0.5: logprint("Something fishy, S_prediab["+str(i)+"]["+str(i)+"] = "+str(S_prediab[i][i]))
+          if S_postdiab[i][i] < 0.5: logprint("Something fishy, S_postdiab["+str(i)+"]["+str(i)+"] = "+str(S_postdiab[i][i]))
+      else: printS = False
+
+    #normpop = self.scan_normpop()
+    #S0_start, S0_end, norm_start, norm_end = normpop[0], normpop[1], normpop[2], normpop[3]
+    S0_start, S0_end, norm_start, norm_end = self.scan_normpop()
+    #print((S0_start, S0_end, norm_start, norm_end))
+    logprint("S0   start->end: "+str(S0_start)+" -> "+str(S0_end)+" ("+str(S0_end-S0_start)+")")
+    logprint("norm start->end: "+str(norm_start)+" -> "+str(norm_end)+" ("+str(norm_end-norm_start)+")")
+    if printS:
+      logprint("S Prediab  : \n"+str(S_prediab))
+      logprint("S Postdiab : \n"+str(S_postdiab))
+      logprint("S Postdiab row norms: "+str(map(lambda x: np.linalg.norm(x), S_postdiab)))
+    
+      
+
+    # ugh this is bad. error checking should have access to more information than we're outputting.
     if self.check_output(output):
       #self.sanity_test(output)
       return output
@@ -485,11 +602,13 @@ class job:
 
 
 class tccontroller:
-  def __init__(self, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False):
+  def __init__(self, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False, RESTART=False):
     self.N = 0
     self.jobs = []
     self.prevjob = None
     self.JOBDIR=JOBDIR
+    if self.JOBDIR[-1] != "/": # make sure theres a leading slash on the directory
+      self.JOBDIR+="/"
     self.JOB_TEMPLATE=JOB_TEMPLATE
     self.TDCI_TEMPLATE=TDCI_TEMPLATE
     self.SCHEDULER=SCHEDULER
@@ -497,6 +616,36 @@ class tccontroller:
     self.Natoms = None
     self.Nkrylov = 2*FIELD_INFO["krylov_end_n"]
     self.logger = logger
+    self.RESTART = RESTART
+    if RESTART:
+      self.restart()
+
+  # find the last valid TDCI calculation for continuity, return step number.
+  def restart(self):
+    print("Detecting last valid TDCI calculation in "+str(JOBDIR)+"electronic/")
+    joblist = [f for f in os.listdir(JOBDIR+"electronic/") if os.path.isdir(f) ]
+    joblist.sort(reverse=True) # highest numbered directories will be at the start of the list
+    prevjob = None
+    i=0
+    while ((prevjob == None) and (i < len(joblist))): # loop over the subdirectories
+      if joblist[i].isdigit(): # make sure directory is numbered in case of 'grad'
+        xyzpath = "" # need one to make a job instance, should be fine since we're not running it.
+        j = job( int(joblist[i]), self.Natoms, self.Nkrylov, None, None, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER )
+        tcdata = j.output() # Check if the job completed and has good output
+        print(tcdata)
+        if tcdata:
+          prevjob = j
+        else:
+          del j
+      i+=1
+    if prevjob is None:
+      print("Can't find any valid jobs in "+str(JOBDIR)+"electronic/ ... Wrong jobdir?")
+      os.kill()
+    print("Last valid job is "+str(JOBDIR)+"electronic/"+str(prevjob.N))
+    self.N = prevjob.N+1
+    self.prevjob = prevjob
+    self.jobs.append(prevjob)
+    return prevjob.N
 
   def grad(self, xyzpath, ReCn=None, ImCn=None):
     if self.N == 0:
@@ -531,7 +680,6 @@ class tccontroller:
     j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.dir = self.JOBDIR+"electronic/hessian"+str(self.N)+"/"
     return j.run_safely()
-    
     
 
   def nextstep(self, xyzpath, ReCn=None, ImCn=None):
