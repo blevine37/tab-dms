@@ -118,8 +118,10 @@ TDCI_TEMPLATE = {
   #"active"               : "8", 
   #"closed"               : "7", # Ethylene 2/2
   #"active"               : "2", 
-  "closed"               : "0",
+  "closed"               : "0", # H2O STO-3G full CI
   "active"               : "7",
+  #"closed"               : "0", # H2O bigbasis
+  #"active"               : "10",
   "cassinglets"          : "3",
   "castriplets"          : "0",
   "cascharges"           : "no", # Turning extra analyses off to save time

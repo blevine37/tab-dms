@@ -67,7 +67,7 @@ def h5py_plot(steptime):
 
     print("Plotting PE/KE in ehrenfest.png")
     # Open h5py file
-    h5f = h5py.File('data.hdf5', 'r')
+    h5f = h5py.File('data2.hdf5', 'r')
 
     #import pdb; pdb.set_trace()
     # Get number of iterations
@@ -382,7 +382,7 @@ def h2o_bond(steptime):
 
   """
 
-  f = h5py.File('data.hdf5', 'r')
+  f = h5py.File('data2.hdf5', 'r')
   steps = f['geom'].shape[0]
   natoms = f['geom'].shape[1]
   if natoms != 3:
@@ -445,7 +445,7 @@ def h2o_bond(steptime):
     
   
 
-h5f = h5py.File('data.hdf5', 'r')
+h5f = h5py.File('data2.hdf5', 'r')
 #import pdb; pdb.set_trace()
 steptime = h5f['time'][1] - h5f['time'][0]
 h5f.close()
@@ -461,7 +461,7 @@ X, poten, kinen, tot = h5py_plot(steptime)
 make_xyz_series(nsteps)
 h2o_bond(steptime)
 
-#plot_state_energies(nstates, nsteps,steptime)
+plot_state_energies(nstates, nsteps,steptime)
 plot_populations(nstates,nsteps,steptime)
 
 

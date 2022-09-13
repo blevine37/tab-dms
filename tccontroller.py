@@ -189,6 +189,8 @@ class job:
     self.SCHEDULER=SCHEDULER # Unimplemented: will interface with standard scheduler 
     self.FIELD_INFO = FIELD_INFO
     self.ndets = 0
+    self.nmo = 0
+    self.nbf = 0
     self.restarts = 0
     self.gradjob = False
     self.logger = logger
@@ -200,7 +202,7 @@ class job:
 
   def readmisc(self):
     f = open(self.dir+"misc.bin",'rb')
-    self.ndets = struct.unpack('i', f.read())[0]
+    self.ndets, self.nmo, self.nbf = struct.unpack('iii', f.read())
     f.close();del f
 
   def make_files(self):
@@ -469,7 +471,7 @@ class job:
     filesgood = True
     files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin", "tdci.molden"]
     if (self.n > 0) and (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
-      files += ["S_MIXED_MO_active.bin", "S_MIXED_MO_postdiab.bin"]
+      files += ["S_MIXED_MO_active.bin", "S_MIXED_MO_postdiab.bin", "C_prediab.bin", "C_postdiab.bin"]
     if self.FIELD_INFO["krylov_end"]:
       files += ["ReCn_krylov_end.bin", "ImCn_krylov_end.bin", "Cn_krylov_end.bin", "E_krylov_end.bin", "tdcigrad_krylov.bin"]
     for fn in files:
@@ -530,6 +532,8 @@ class job:
     printS = False
     S_prediab = None
     S_postdiab = None
+    nmo = self.nmo
+    nbf = self.nbf
     if self.n > 0:
       # Error analysis
       # tdci end energy is in 'eng'
@@ -544,8 +548,12 @@ class job:
         printS = True
         S_prediab = read_bin_array(self.dir+"S_MIXED_MO_active.bin", acti**2)
         S_prediab.resize((acti,acti))
-        S_postdiab = read_bin_array(self.dir+"S_MIXED_MO_postdiab.bin", acti**2)
+        S_postdiab = read_bin_array(self.dir+"S_MIXED_MO_active_postdiab.bin", acti**2)
         S_postdiab.resize((acti,acti))
+        C_prediab = read_bin_array(self.dir+"C_prediab.bin", nbf**2)
+        C_prediab.resize((nbf,nbf))
+        C_postdiab = read_bin_array(self.dir+"C_postdiab.bin", nbf**2)
+        C_postdiab.resize((nbf,nbf))
         for i in range(0,acti):
           if S_prediab[i][i] < 0.5: logprint("Something fishy, S_prediab["+str(i)+"]["+str(i)+"] = "+str(S_prediab[i][i]))
           if S_postdiab[i][i] < 0.5: logprint("Something fishy, S_postdiab["+str(i)+"]["+str(i)+"] = "+str(S_postdiab[i][i]))
@@ -561,6 +569,9 @@ class job:
       logprint("S Prediab  : \n"+str(S_prediab))
       logprint("S Postdiab : \n"+str(S_postdiab))
       logprint("S Postdiab row norms: "+str(map(lambda x: np.linalg.norm(x), S_postdiab)))
+      if self.nmo < 64:
+        logprint("C Prediab  : \n"+str(C_prediab ))
+        logprint("C Postdiab : \n"+str(C_postdiab))
     
       
 
