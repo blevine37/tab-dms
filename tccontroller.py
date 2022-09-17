@@ -423,6 +423,7 @@ class job:
       return False
     grad = read_bin_array(self.dir+"gradinit.bin", 3*self.Natoms)
     grad.resize((self.Natoms,3))
+    logprint("Grad:\n"+str(grad))
     #E = float(read_bin_array(self.dir+"Einit.bin", 1)[0])
     E = float(self.scan_outfile(["Initial", "energy:"], 2))
     nstates = int(self.TDCI_TEMPLATE["cassinglets"])
@@ -471,7 +472,7 @@ class job:
     filesgood = True
     files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin", "tdci.molden"]
     if (self.n > 0) and (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
-      files += ["S_MIXED_MO_active.bin", "S_MIXED_MO_postdiab.bin", "C_prediab.bin", "C_postdiab.bin"]
+      files += ["S_MIXED_MO_active.bin"]
     if self.FIELD_INFO["krylov_end"]:
       files += ["ReCn_krylov_end.bin", "ImCn_krylov_end.bin", "Cn_krylov_end.bin", "E_krylov_end.bin", "tdcigrad_krylov.bin"]
     for fn in files:
@@ -489,10 +490,18 @@ class job:
     
     # Format output structure
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
+
+    if os.path.exists(self.dir+"gradinit.bin"):
+      grad_init = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
+      grad_init.resize((self.Natoms, 3))
+      logprint("Grad_init:\n"+str(grad_init))
+
     grad = read_bin_array(self.dir+"tdcigrad.bin", 3*self.Natoms)
     grad.resize((self.Natoms, 3))
-    grad_half = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
+    #grad_half = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
+    grad_half = read_bin_array(self.dir+"grad_S0.bin", 3*self.Natoms)
     grad_half.resize((self.Natoms, 3))
+    logprint("Grad_half (S0 mod):\n"+str(grad_half))
     krylov_states = None
     krylov_energies = None
     krylov_gradients = None
@@ -531,7 +540,6 @@ class job:
     # Check overlap matrices
     printS = False
     S_prediab = None
-    S_postdiab = None
     nmo = self.nmo
     nbf = self.nbf
     if self.n > 0:
@@ -548,15 +556,8 @@ class job:
         printS = True
         S_prediab = read_bin_array(self.dir+"S_MIXED_MO_active.bin", acti**2)
         S_prediab.resize((acti,acti))
-        S_postdiab = read_bin_array(self.dir+"S_MIXED_MO_active_postdiab.bin", acti**2)
-        S_postdiab.resize((acti,acti))
-        C_prediab = read_bin_array(self.dir+"C_prediab.bin", nbf**2)
-        C_prediab.resize((nbf,nbf))
-        C_postdiab = read_bin_array(self.dir+"C_postdiab.bin", nbf**2)
-        C_postdiab.resize((nbf,nbf))
         for i in range(0,acti):
-          if S_prediab[i][i] < 0.5: logprint("Something fishy, S_prediab["+str(i)+"]["+str(i)+"] = "+str(S_prediab[i][i]))
-          if S_postdiab[i][i] < 0.5: logprint("Something fishy, S_postdiab["+str(i)+"]["+str(i)+"] = "+str(S_postdiab[i][i]))
+          if S_prediab[i][i] < 0.5: logprint("WARNING: S_prediab["+str(i)+"]["+str(i)+"] = "+str(S_prediab[i][i]))
       else: printS = False
 
     #normpop = self.scan_normpop()
@@ -567,12 +568,7 @@ class job:
     logprint("norm start->end: "+str(norm_start)+" -> "+str(norm_end)+" ("+str(norm_end-norm_start)+")")
     if printS:
       logprint("S Prediab  : \n"+str(S_prediab))
-      logprint("S Postdiab : \n"+str(S_postdiab))
-      logprint("S Postdiab row norms: "+str(map(lambda x: np.linalg.norm(x), S_postdiab)))
-      if self.nmo < 64:
-        logprint("C Prediab  : \n"+str(C_prediab ))
-        logprint("C Postdiab : \n"+str(C_postdiab))
-    
+      logprint("S Prediab row norms: "+str(map(lambda x: np.linalg.norm(x), S_prediab)))
       
 
     # ugh this is bad. error checking should have access to more information than we're outputting.

@@ -48,13 +48,13 @@ f.close()
 autimetosec = 2.4188843265857e-17
 
 # Dynamics time step in atomic units
-delta = 5
+delta = 1
 
 # TDCI simulation time in femtoseconds
 tdci_simulation_time = (delta/1.0) * autimetosec * 1e15 # fs/s
 
 # TDCI number of time steps
-nstep = 8000
+nstep = 2000
 
 ########################################
 # TDCI TeraChem Template
@@ -100,7 +100,7 @@ TDCI_TEMPLATE = {
   #"cismaxiter"           : "500",
   #"cisconvtol"           : "1.0e-8",
   "cpcisiter"            : "350",
-  "fon"                  : "yes",
+  "fon"                  : "no",
   "fon_method"           : "gaussian",
   "fon_temperature"      : "0.125",
   #"fon_mix"              : "no",
@@ -130,6 +130,8 @@ TDCI_TEMPLATE = {
   "tdci_gradient"        : "yes",  # <-- don't change this
   "tdci_gradient_half"   : "yes",  # <-- don't change this
   "tdci_fieldfile0"      : "field0.bin", # <-- don't change this
+  #"tdci_sanitytest"      : "no",
+  "tdci_grad_init"        : "yes",  # <-- don't change this
 
   # orbital options
   #"fon"                  : "yes",
@@ -543,6 +545,7 @@ else: # intialize normally
   # Initialize accelerations
   logprint("Initializing accelerations")
   a_curr, pe_curr = tc_grad(tc, geomfilename, masses, cs_curr, ReCn=initial_recn)
+  a_curr = np.zeros([len(atoms),3]) # ignore gradient for one step...
 
   # Calculate initial kinetic energy
   logprint("Calculating initial kinetic energy")
@@ -560,7 +563,7 @@ for it in range(0, 10000):
 
   # Log iteration start
   logprint("Iteration " + str(it).zfill(4) + " started")
-
+  print("accel:\n"+str(a_curr))
   # Calculate next geometry
   logprint("Calculating next geometry")
   x_next = x_curr + v_curr * delta + a_curr * delta**2 / 2
