@@ -119,13 +119,13 @@ def h5py_plot(steptime):
     ax = fig.add_subplot(111)
     ax.set_xlabel('Time (fs)')
     ax.set_ylabel('Rel. E (eV)')
-    ax.plot(X, poten, label="Potential", marker="^", linewidth=1.2)
-    ax.plot(X, kinen, label="Kinetic", marker="v", linewidth=1)
-    ax.plot(X, tot, label="Total", marker="o", linewidth=1)
-    ax.plot([], [], label=r'$\sum \Delta x_i$', marker="o", color="tab:red") # Need this for legend
-    ax_dist = ax.twinx() 
-    ax_dist.set_ylabel("Distance (Angstrom)", color="tab:red")
-    ax_dist.plot(X, xyzdist, label=r'$\sum \Delta x_i$', marker="o", markersize=4, linewidth=1, color="tab:red")
+    ax.plot(X, poten, label="Potential", marker="^", linewidth=1.2, markersize=5)
+    ax.plot(X, kinen, label="Kinetic", marker="v", linewidth=1, markersize=4)
+    #ax.plot(X, tot, label="Total", marker="o", linewidth=1)
+    #ax.plot([], [], label=r'$\sum \Delta x_i$', marker="o", color="tab:red") # Need this for legend
+    #ax_dist = ax.twinx() 
+    #ax_dist.set_ylabel("Distance (Angstrom)", color="tab:red")
+    #ax_dist.plot(X, xyzdist, label=r'$\sum \Delta x_i$', marker="o", markersize=4, linewidth=1, color="tab:red")
     ax.legend()
     #ax_dist.legend()
     plt.tight_layout()
@@ -133,9 +133,9 @@ def h5py_plot(steptime):
 
     fig2 = plt.figure()
     ax2 = fig2.add_subplot(111)
-    ax.set_xlabel('Time (fs)')
-    ax.set_ylabel('Rel. E (eV)')
-    ax2.plot(X, tot, label="Total Energy", marker="o", linewidth=0.4)
+    ax2.set_xlabel('Time (fs)')
+    ax2.set_ylabel('Rel. E (eV)')
+    ax2.plot(X, tot, label="Total Energy", marker="o", linewidth=0.4, markersize=4)
     ax2.legend()
     plt.tight_layout()
     #plt.xlim([0,12])
@@ -209,6 +209,7 @@ def make_xyz_series(nsteps):
 # VMD, ffmpeg
 def render_trajectory(nsteps):
   print("Rendering trajectory to mp4...")
+  # Clean directories
   if os.path.exists("xyzs/"):
     shutil.rmtree("xyzs/")
     os.makedirs("xyzs/")

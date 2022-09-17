@@ -492,16 +492,16 @@ class job:
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
 
     if os.path.exists(self.dir+"gradinit.bin"):
-      grad_init = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
+      grad_init = read_bin_array(self.dir+"gradinit.bin", 3*self.Natoms)
       grad_init.resize((self.Natoms, 3))
       logprint("Grad_init:\n"+str(grad_init))
 
     grad = read_bin_array(self.dir+"tdcigrad.bin", 3*self.Natoms)
     grad.resize((self.Natoms, 3))
-    #grad_half = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
-    grad_half = read_bin_array(self.dir+"grad_S0.bin", 3*self.Natoms)
+    grad_half = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
+    #grad_half = read_bin_array(self.dir+"grad_S0.bin", 3*self.Natoms)
     grad_half.resize((self.Natoms, 3))
-    logprint("Grad_half (S0 mod):\n"+str(grad_half))
+    logprint("Grad_half:\n"+str(grad_half))
     krylov_states = None
     krylov_energies = None
     krylov_gradients = None
@@ -526,7 +526,7 @@ class job:
                "imcn": imcn,  # 1d array, number of determinants
                "eng": eng,    # float, Energy of current wfn
                "grad": grad,    # 2d array, Natoms x 3 dimensions.
-               "grad_half": grad,    # 2d array, Natoms x 3 dimensions.
+               "grad_half": grad_half,    # 2d array, Natoms x 3 dimensions.
                "recn_krylov": recn_krylov,      # 1d array, 2*krylov_sub_n
                "imcn_krylov": imcn_krylov,      # 1d array, 2*krylov_sub_n
                "krylov_states": krylov_states,  # 2d array of CI vectors of each approx eigenstate

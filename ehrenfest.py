@@ -48,13 +48,13 @@ f.close()
 autimetosec = 2.4188843265857e-17
 
 # Dynamics time step in atomic units
-delta = 1
+delta = 5
 
 # TDCI simulation time in femtoseconds
 tdci_simulation_time = (delta/1.0) * autimetosec * 1e15 # fs/s
 
 # TDCI number of time steps
-nstep = 2000
+nstep = 8000
 
 ########################################
 # TDCI TeraChem Template
@@ -289,6 +289,8 @@ def getAccel(grad, ReCn, ImCn):
   for a, mass in zip(accs, masses):
     a /= mass
 
+  print("getAccel output:")
+  print(accs)
 
   # Return accelerations
   return accs
@@ -578,6 +580,12 @@ for it in range(0, 10000):
     TCdata = tc.nextstep("temp.xyz")
 
   # Calculate acceleration from gradient at half time-step.
+  print("atoms:")
+  print(atoms)
+  print("x:")
+  print(x_next)
+  print("TCdata['grad_half']:")
+  print(TCdata["grad_half"])
   a_next = getAccel(TCdata["grad_half"], TCdata["recn"], TCdata["imcn"])
   pe_next = float(TCdata['eng'])
 
