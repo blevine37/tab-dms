@@ -35,6 +35,36 @@ def xyz_to_tcstring(filename):
     geom.append(l.split(" ")[3])
     l = f.readline()
 
+
+########################################
+# Geometry read and write
+########################################
+
+def xyz_write(atoms, coords, filename):
+  f = open(filename,'w')
+  f.write(str(len(atoms))+'\n\n')
+  for atom, coord in zip(atoms, coords):
+      f.write(('{:>3s}'+'{:25.17f}'*3+'\n').format(atom, coord[0], coord[1], coord[2]))
+  f.close()
+
+def xyz_read(filename):
+  f = open(filename,'r')
+  n = int(f.readline())
+  f.readline()
+  atoms  = []
+  coords = np.empty([n, 3])
+  for i in range(0, n):
+    fields = f.readline().split()
+    if len(fields) != 4: break
+    atoms.append(fields[0])
+    coords[i][0] = float(fields[1])
+    coords[i][1] = float(fields[2])
+    coords[i][2] = float(fields[3])
+  f.close()
+  return (atoms, coords)
+
+
+
 # Used to sort input file dictionaries into something a little more human-readable
 def dictkey(key):
   keylist = ["gpus", "timings", "precision", "threall", "convthre", "basis", 
@@ -174,13 +204,13 @@ class molden:
     
 
 class job:
-  def __init__(self, n, Natoms, Nkrylov, ReCn, ImCn, xyzpath, pjob, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False):
+  def __init__(self, n, Natoms, Nkrylov, ReCn, ImCn, xyz, pjob, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False):
     self.n = n
     self.Natoms = Natoms
     self.Nkrylov = Nkrylov
     self.ReCn = ReCn # Initial value input by user
     self.ImCn = ImCn
-    self.xyzpath = xyzpath
+    self.xyz = xyz
     self.pjob = pjob
     self.dir = JOBDIR+"electronic/"+str(n)+"/"
     self.JOBDIR=JOBDIR
@@ -207,7 +237,8 @@ class job:
 
   def make_files(self):
     makedirs(self.dir)
-    shutil.copy(self.xyzpath, self.dir+self.xyzpath.split("/")[-1]) # copy xyzfile
+    #shutil.copy(self.xyzpath, self.dir+self.xyzpath.split("/")[-1]) # copy xyzfile
+    xyz_write(self.FIELD_INFO["atoms"], self.xyz, self.dir+"temp.xyz")
     shutil.copy(self.JOB_TEMPLATE, self.dir+"/tdci.job")
     time.sleep(2) # make sure file gets copied
     search_replace_file(self.dir+"tdci.job", "temppath", self.dir)
@@ -217,7 +248,8 @@ class job:
     #  tempname = "grad.in"
     #shutil.copy(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
     dict_to_file(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
-    search_replace_file(self.dir+tempname, "coords.xyz", self.xyzpath.split("/")[-1]) 
+    #search_replace_file(self.dir+tempname, "coords.xyz", self.xyzpath.split("/")[-1]) 
+    search_replace_file(self.dir+tempname, "coords.xyz", "temp.xyz") # screw it, why not hardcode it
     if self.gradjob:
       search_replace_file(self.dir+tempname, "tdci_fieldfile0 field0.bin", "")
       search_replace_file(self.dir+tempname, "tdci_fieldfile1 field1.bin", "")
@@ -339,8 +371,9 @@ class job:
       if self.gradjob: # if we're doing gradient only (not tdci) for initial step
         output = self.gradoutput()
       elif self.TDCI_TEMPLATE["run"] == "frequencies":
-        xyzname = os.path.basename(self.xyzpath) # remove directories from path
-        xyzname = xyzname[:xyzname.rindex(".")] # remove extension
+        #xyzname = os.path.basename(self.xyzpath) # remove directories from path
+        #xyzname = xyzname[:xyzname.rindex(".")] # remove extension
+        xyzname = "temp"
         scrdir = self.dir + "scr."+xyzname+"/"
         output = self.read_hessfile(scrdir+"Hessian.bin")
       else: # normal tdci
@@ -441,7 +474,10 @@ class job:
     return { "grad"       : grad,
              "eng"        : E,
              "states"     : states,
-             "states_eng" : states_eng
+             "states_eng" : states_eng,
+             "recn" : self.ReCn,
+             "imcn" : self.ImCn,
+             "tdci_dir": self.dir
            }
 
 
@@ -531,7 +567,8 @@ class job:
                "imcn_krylov": imcn_krylov,      # 1d array, 2*krylov_sub_n
                "krylov_states": krylov_states,  # 2d array of CI vectors of each approx eigenstate
                "krylov_energies": krylov_energies, # 1d array of energies of each approx eigenstate
-               "krylov_gradients": krylov_gradients # 3d array of approx eigenstate gradients, Napprox x Natoms x 3 dim.
+               "krylov_gradients": krylov_gradients, # 3d array of approx eigenstate gradients, Napprox x Natoms x 3 dim.
+               "tdci_dir": self.dir
              }
 
     #print("TDCI job Output:\n")
@@ -620,7 +657,7 @@ class tccontroller:
     self.TDCI_TEMPLATE=TDCI_TEMPLATE
     self.SCHEDULER=SCHEDULER
     self.FIELD_INFO=FIELD_INFO
-    self.Natoms = None
+    self.Natoms = len(FIELD_INFO["atoms"])
     self.Nkrylov = 2*FIELD_INFO["krylov_end_n"]
     self.logger = logger
     self.RESTART = RESTART
@@ -636,8 +673,8 @@ class tccontroller:
     i=0
     while ((prevjob == None) and (i < len(joblist))): # loop over the subdirectories
       if joblist[i].isdigit(): # make sure directory is numbered in case of 'grad'
-        xyzpath = "" # need one to make a job instance, should be fine since we're not running it.
-        j = job( int(joblist[i]), self.Natoms, self.Nkrylov, None, None, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER )
+        xyz = np.zeros((self.Natoms,3)) # need one to make a job instance, should be fine since we're not running it.
+        j = job( int(joblist[i]), self.Natoms, self.Nkrylov, None, None, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER )
         tcdata = j.output() # Check if the job completed and has good output
         print(tcdata)
         if tcdata:
@@ -654,11 +691,12 @@ class tccontroller:
     self.jobs.append(prevjob)
     return prevjob.N
 
-  def grad(self, xyzpath, ReCn=None, ImCn=None):
+  def grad(self, xyz, ReCn=None, ImCn=None):
     if self.N == 0:
-      f = open(xyzpath, 'r')
-      self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
-      f.close();del f
+      #f = open(xyzpath, 'r')
+      #self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
+      #f.close();del f
+      self.Natoms = len(xyz)
     grad_template = copy.deepcopy(self.TDCI_TEMPLATE)
     # overwrite template to do gradient stuff instead of tdci
     #grad_template["run"] = "gradient"
@@ -671,33 +709,35 @@ class tccontroller:
     grad_template["tdci_simulation_time"] = "0.01"
     grad_template["tdci_nstep"] = "1"
     grad_template["tdci_krylov_end"] = "no"
-    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
+    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.gradjob = True
     j.dir = self.JOBDIR+"electronic/grad/"
     return j.run_safely()
 
-  def hessian(self, xyzpath, temp):
+  def hessian(self, xyz, temp):
     if self.N == 0:
-      f = open(xyzpath, 'r')
-      self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
-      f.close();del f
+      #f = open(xyzpath, 'r')
+      #self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
+      #f.close();del f
+      self.Natoms = len(self.FIELD_INFO["atoms"])
     hess_template = copy.deepcopy(self.TDCI_TEMPLATE)
     hess_template["run"] = "frequencies"
     hess_template["to"] = str(temp)
-    j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
+    j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.dir = self.JOBDIR+"electronic/hessian"+str(self.N)+"/"
     return j.run_safely()
     
 
-  def nextstep(self, xyzpath, ReCn=None, ImCn=None):
+  def nextstep(self, xyz, ReCn=None, ImCn=None):
     #print("nextstep: "+str(self.N)+"\n")
     if self.N == 0:
-      f = open(xyzpath, 'r')
-      self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
-      f.close();del f
-      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
+      #f = open(xyzpath, 'r')
+      #self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
+      #f.close();del f
+      self.Natoms = len(self.FIELD_INFO["atoms"])
+      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     else:
-      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyzpath, self.jobs[-1], self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
+      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.jobs[-1], self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     self.jobs.append(j)
     self.N+=1
     return j.run_safely()

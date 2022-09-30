@@ -145,6 +145,29 @@ def h5py_plot(steptime):
     h5f.close()
     return( (X, poten, kinen, tot) )
 
+
+def pot_ke_animation(X, poten, kinen):
+  print("peke len(X):"+str(len(X)))
+  if os.path.exists("peke_plots/"):
+    shutil.rmtree("peke_plots/")
+    os.makedirs("peke_plots/")
+  else:
+    os.makedirs("peke_plots/")
+  for j in range(0,len(X)):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_xlabel('Time (fs)')
+    ax.set_ylabel('Rel. E (eV)')
+    ax.plot(X, poten, label="Potential", linestyle="-", linewidth=1.2)
+    ax.plot(X, kinen, label="Kinetic", linestyle="-", linewidth=1)
+    ax.legend()
+    #ax_dist.legend()
+    plt.tight_layout()
+    ax.axvline(x=X[j], color="black")
+    figdpi = 600.
+    plt.savefig("peke_plots/peke"+"{:04d}".format(j)+".png", figsize=(360./figdpi, 270./figdpi), dpi=figdpi, bbox_inches='tight')
+  
+
 # should return a red->blue scale in rgb tuples
 def rgb_linspace(n):
   a = np.linspace(0, 2, n)
@@ -162,7 +185,8 @@ def rgb_linspace(n):
       rgbs.append((0.,0.,1.))
   return rgbs
 
-def plot_populations(nstates, nsteps, steptime):
+
+def get_populations(nstates, nsteps):
   print("Plotting state populations...")
   pops = []
   for i in range(0,nstates):
@@ -175,6 +199,10 @@ def plot_populations(nstates, nsteps, steptime):
     for j in range(0,nstates):
       pops[j].append(float(l[j+1])) # first element in l is time
     f.close()
+  return pops
+
+
+def plot_populations(nstates, nsteps, steptime, pops):
   # Plot 'em
   fig = plt.figure()
   ax = fig.add_subplot(111)
@@ -193,6 +221,35 @@ def plot_populations(nstates, nsteps, steptime):
   ax.legend(loc="upper right", fontsize="xx-small")
   plt.savefig("Pops.png", dpi=800, bbox_inches='tight')
   
+
+def plot_populations_animate(nstates, nsteps, steptime, pops):
+  if os.path.exists("pop_plots/"):
+    shutil.rmtree("pop_plots/")
+    os.makedirs("pop_plots/")
+  else:
+    os.makedirs("pop_plots/")
+  for j in range(0,nsteps):
+    # Plot 'em
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    rgbs = rgb_linspace(nstates)
+    print(rgbs)
+    print("len(pops[0]): "+str(len(pops[0])))
+    X = np.array(range(0,len(pops[0]))) * steptime/1000.  
+    print(len(X))
+    print(max(X))
+    for i in range(0,nstates):
+      ax.plot(X,pops[i], label="S"+str(i), marker="o", markersize="3", linewidth=1.2, color=rgbs[i])
+    
+    ax.set_ylabel('Population')
+    ax.set_xlabel("Time (fs)")
+    #plt.xlim([0,12])
+    ax.legend(loc="upper right", fontsize="xx-small")
+    ax.axvline(x=X[j], color="black")
+    figdpi = 600.
+    plt.savefig("pop_plots/Pop"+"{:04d}".format(j)+".png", figsize=(360./figdpi, 270./figdpi), dpi=figdpi, bbox_inches='tight')
+
+
 
 # For MOLDEN 
 def make_xyz_series(nsteps):
@@ -270,9 +327,25 @@ def render_trajectory(nsteps):
   print("ffmpeg endcode: "+str(ffmpeg_endcode))
   # clean up files
   #os.remove("vmd.tcl")
-  shutil.rmtree("bmp/")
-  shutil.rmtree("xyzs/")
+  #shutil.rmtree("bmp/")
+  #shutil.rmtree("xyzs/")
   return 0
+
+
+def ffmpeg_4panel(nsteps):
+  if os.path.exists("render1/"):
+    shutil.rmtree("render1/")
+    os.makedirs("render1/")
+  for i in range(0,nsteps):
+    s = "{:04d}".format(i)
+    composite_p = subprocess.Popen('ffmpeg -i ediff_plots/Egap'+s+".png -i peke_plots/peke"+s+".png -i bmp/"+s+".bmp -i pop_plots/Pop"+s+'.png -lavfi "xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0" '+s+'.jpg')
+
+  ffmpegp = subprocess.Popen("ffmpeg -y -r 20 -i bmp/%04d.jpg -c:v libx264 "+
+                             " -preset slow -crf 18 -force_key_frames source "+
+                             " -x264-params keyint=4:scenecut=0 -pix_fmt yuv420p "+
+                             " trajectory_panel.mp4", shell=True)
+  ffmpeg_endcode = ffmpegp.wait()
+  print("ffmpeg endcode: "+str(ffmpeg_endcode))
 
 def plot_state_energies(nstates, nsteps,steptime):
   print("Getting state energy data...")
@@ -318,6 +391,7 @@ def plot_state_energies(nstates, nsteps,steptime):
 
 
   MakeEStatesPlot = True
+  AU_to_eV = 27.2114
   if MakeEStatesPlot:
     print("Plotting state energies...")
     # shift to relative energy
@@ -328,7 +402,7 @@ def plot_state_energies(nstates, nsteps,steptime):
     rgbs = rgb_linspace(nstates)
     print(rgbs)
     for i in range(0,nstates):
-      ax.plot(X, np.array(energies_postdiab[i])-emin, label="S"+str(i), marker="o", markersize="3", linewidth=1.2, color=rgbs[i])
+      ax.plot(X, AU_to_eV*(np.array(energies_postdiab[i])-emin), label="S"+str(i), marker="o", markersize="3", linewidth=1.2, color=rgbs[i])
     ax.set_xlabel('Time (fs)')
     ax.set_ylabel('Rel. E (V)')
     ax.legend()
@@ -341,11 +415,53 @@ def plot_state_energies(nstates, nsteps,steptime):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     for i in range(1,nstates):
-      ax.plot(X, np.array(energies_postdiab[i])-np.array(energies_postdiab[i-1]), label="S"+str(i)+"-S"+str(i-1), marker="o", markersize="3", linewidth=1.2, color=rgbs[i])
+      ax.plot(X, AU_to_eV*(np.array(energies_postdiab[i])-np.array(energies_postdiab[i-1])), label="S"+str(i)+"-S"+str(i-1), marker="o", markersize="3", linewidth=1.2, color=rgbs[i])
     ax.set_xlabel('Time (fs)')
     ax.set_ylabel('E (eV)')
     ax.legend()
+
+    yline = AU_to_eV*0.276
+    ax.axhline(y=yline, color="red") # Field Energy from f0
+    import matplotlib.transforms as transforms
+    trans = transforms.blended_transform_factory(
+	ax.get_yticklabels()[0].get_transform(), ax.transData)
+    ax.text(0,yline, "{:.3f}".format(yline), color="red", transform=trans, 
+	    ha="right", va="center")
+
     plt.savefig("Egaps.png", dpi=800, bbox_inches='tight')
+  return energies_postdiab
+
+
+def EDiffPlot_Animation(X, energies_postdiab, rgbs):
+  if os.path.exists("ediff_plots/"):
+    shutil.rmtree("ediff_plots/")
+    os.makedirs("ediff_plots/")
+  else:
+    os.makedirs("ediff_plots/")
+  for j in range(0,len(X)):
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    for i in range(1,nstates):
+      ax.plot(X, AU_to_eV*(np.array(energies_postdiab[i])-np.array(energies_postdiab[i-1])), label="S"+str(i)+"-S"+str(i-1), marker="o", markersize="3", linewidth=1.2, color=rgbs[i])
+    ax.set_xlabel('Time (fs)')
+    ax.set_ylabel('E (eV)')
+    ax.legend()
+
+    yline = AU_to_eV*0.276
+    ax.axhline(y=yline, color="red") # Field Energy from f0
+    import matplotlib.transforms as transforms
+    trans = transforms.blended_transform_factory(
+	ax.get_yticklabels()[0].get_transform(), ax.transData)
+    ax.text(0,yline, "{:.3f}".format(yline), color="red", transform=trans, 
+	    ha="right", va="center")
+
+    ax.axvline(x=X[j], color="black")
+    figdpi = 600.
+    plt.savefig("ediff_plots/Egap"+"{:04d}".format(j)+".png", figsize=(360./figdpi, 270./figdpi), dpi=figdpi, bbox_inches='tight')
+    
+
+
+
 
 
 # detects if the molecule is h2o and calculates the O-H bond distance over time
@@ -462,8 +578,9 @@ X, poten, kinen, tot = h5py_plot(steptime)
 make_xyz_series(nsteps)
 h2o_bond(steptime)
 
-plot_state_energies(nstates, nsteps,steptime)
-plot_populations(nstates,nsteps,steptime)
+energies_postdiab = plot_state_energies(nstates, nsteps,steptime)
+pops = get_populations(nstates,nsteps)
+plot_populations(nstates,nsteps,steptime,pops)
 
 
 
@@ -471,3 +588,11 @@ render_trajectory(nsteps)
 
 
 
+#plot_populations_animate(nstates, nsteps, steptime, pops)
+#pot_ke_animation(X,poten,kinen)
+
+rgbs = rgb_linspace(nstates)
+
+#EDiffPlot_Animation(X, energies_postdiab, rgbs)
+
+#ffmpeg_4panel(nsteps)
