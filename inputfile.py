@@ -1,21 +1,14 @@
 
 
 
-
-
+JOBDIR = "./"
 xyzpath = "h2o.xyz"
 initial_electronic_state = 0  # S0 = 0, S1 = 1, etc.
 
 RESTART = False
+SCHEDULER = False
 TERACHEM = "/home/adurden/terachem/build/bin/" # directory containing terachem executable
 
-# Job Template: Used to make a shell script that executes terachem 
-#   make sure you include temppath and tempname in your job template!
-#   those keywords are search and replaced
-job_template_contents = "#!/bin/bash\n\
-                         source /home/adurden/.bashrc\n\
-                         cd temppath\n\
-                        "+TERACHEM+"terachem tempname.in > tempname.out\n"
 
 TIMESTEP_AU = 5.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attosecond
 
@@ -127,6 +120,13 @@ def f0_values(t):
 
 
 
+# Job Template: Used to make a shell script that executes terachem 
+#   make sure you include temppath and tempname in your job template!
+#   those keywords are search and replaced
+job_template_contents = "#!/bin/bash\n\
+                         source /home/adurden/.bashrc\n\
+                         cd temppath\n\
+                        "+TERACHEM+"terachem tempname.in > tempname.out\n"
 
 
 

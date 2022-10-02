@@ -214,7 +214,7 @@ class job:
     self.pjob = pjob
     self.dir = JOBDIR+"electronic/"+str(n)+"/"
     self.JOBDIR=JOBDIR
-    self.JOB_TEMPLATE=JOB_TEMPLATE # path to the bash script that runs tc (with tempdir and tempname)
+    self.JOB_TEMPLATE=JOB_TEMPLATE # contents of bash script that runs tc (with tempdir and tempname)
     self.TDCI_TEMPLATE=TDCI_TEMPLATE # dictionary of terachem options written to input file
     self.SCHEDULER=SCHEDULER # Unimplemented: will interface with standard scheduler 
     self.FIELD_INFO = FIELD_INFO
@@ -239,17 +239,21 @@ class job:
     makedirs(self.dir)
     #shutil.copy(self.xyzpath, self.dir+self.xyzpath.split("/")[-1]) # copy xyzfile
     xyz_write(self.FIELD_INFO["atoms"], self.xyz, self.dir+"temp.xyz")
-    shutil.copy(self.JOB_TEMPLATE, self.dir+"/tdci.job")
-    time.sleep(2) # make sure file gets copied
+    # Old code from when JOB_TEMPLATE was a path to a file
+    #shutil.copy(self.JOB_TEMPLATE, self.dir+"/tdci.job")
+    with open(self.dir+"tdci.job", 'w') as templatefile:
+      templatefile.write(self.JOB_TEMPLATE)
+    time.sleep(1) # make sure file gets written and closed properly
     search_replace_file(self.dir+"tdci.job", "temppath", self.dir)
     search_replace_file(self.dir+"tdci.job", "tempname", "test"+str(self.n))
+    
     tempname = "test"+str(self.n)+".in"
     #if self.gradjob:
     #  tempname = "grad.in"
     #shutil.copy(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
     dict_to_file(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
     #search_replace_file(self.dir+tempname, "coords.xyz", self.xyzpath.split("/")[-1]) 
-    search_replace_file(self.dir+tempname, "coords.xyz", "temp.xyz") # screw it, why not hardcode it
+    #search_replace_file(self.dir+tempname, "coords.xyz", "temp.xyz") # screw it, why not hardcode it
     if self.gradjob:
       search_replace_file(self.dir+tempname, "tdci_fieldfile0 field0.bin", "")
       search_replace_file(self.dir+tempname, "tdci_fieldfile1 field1.bin", "")
@@ -646,35 +650,38 @@ class job:
 
 
 class tccontroller:
-  def __init__(self, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False, RESTART=False):
+  def __init__(self, config, logger):
+    self.config = config
     self.N = 0
     self.jobs = []
     self.prevjob = None
-    self.JOBDIR=JOBDIR
+    self.JOBDIR=config.JOBDIR
     if self.JOBDIR[-1] != "/": # make sure theres a leading slash on the directory
       self.JOBDIR+="/"
-    self.JOB_TEMPLATE=JOB_TEMPLATE
-    self.TDCI_TEMPLATE=TDCI_TEMPLATE
-    self.SCHEDULER=SCHEDULER
-    self.FIELD_INFO=FIELD_INFO
-    self.Natoms = len(FIELD_INFO["atoms"])
-    self.Nkrylov = 2*FIELD_INFO["krylov_end_n"]
+    self.JOB_TEMPLATE=config.JOB_TEMPLATE
+    self.TDCI_TEMPLATE=config.TDCI_TEMPLATE
+    self.SCHEDULER=config.SCHEDULER
+    self.FIELD_INFO=config.FIELD_INFO
+    self.Natoms = len(config.FIELD_INFO["atoms"])
+    self.Nkrylov = 2*config.FIELD_INFO["krylov_end_n"]
     self.logger = logger
-    self.RESTART = RESTART
-    if RESTART:
+    self.RESTART = config.RESTART
+    if self.RESTART:
       self.restart()
 
   # find the last valid TDCI calculation for continuity, return step number.
   def restart(self):
-    print("Detecting last valid TDCI calculation in "+str(JOBDIR)+"electronic/")
-    joblist = [f for f in os.listdir(JOBDIR+"electronic/") if os.path.isdir(f) ]
+    print("Detecting last valid TDCI calculation in "+str(self.JOBDIR)+"electronic/")
+    joblist = [f for f in os.listdir(self.JOBDIR+"electronic/") if os.path.isdir(f) ]
     joblist.sort(reverse=True) # highest numbered directories will be at the start of the list
     prevjob = None
     i=0
     while ((prevjob == None) and (i < len(joblist))): # loop over the subdirectories
       if joblist[i].isdigit(): # make sure directory is numbered in case of 'grad'
         xyz = np.zeros((self.Natoms,3)) # need one to make a job instance, should be fine since we're not running it.
-        j = job( int(joblist[i]), self.Natoms, self.Nkrylov, None, None, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER )
+        j = job( int(joblist[i]), self.Natoms, self.Nkrylov, None, None, xyz, 
+                 None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, 
+                 logger=self.logger, SCHEDULER=self.SCHEDULER )
         tcdata = j.output() # Check if the job completed and has good output
         print(tcdata)
         if tcdata:
