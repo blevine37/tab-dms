@@ -1,5 +1,5 @@
 
-import os, shutil, time
+import os, sys, shutil, time
 import numpy as np
 import h5py
 ########################################
@@ -10,15 +10,18 @@ import h5py
 bohrtoangs = 0.529177210903
 # Atomic unit of time to seconds (s)
 autimetosec = 2.4188843265857e-17
+
+
+
 # Need to make sure hdf5 and job directories from previous runs don't get in the way
-def clean_files():
-  if os.path.exists("oldrun/"):
-    shutil.rmtree("oldrun/")
-  os.makedirs("oldrun/")
-  if os.path.exists("electronic"):
-    shutil.move("electronic", "oldrun/electronic")
-  if os.path.exists("data.hdf5"):
-    shutil.move("data.hdf5", "oldrun/data.hdf5")
+def clean_files(jobdir):
+  if os.path.exists(jobdir+"oldrun/"):
+    shutil.rmtree(jobdir+"oldrun/")
+  os.makedirs(jobdir+"oldrun/")
+  if os.path.exists(jobdir+"electronic"):
+    shutil.move(jobdir+"electronic", jobdir+"oldrun/electronic")
+  if os.path.exists(jobdir+"data.hdf5"):
+    shutil.move(jobdir+"data.hdf5", jobdir+"oldrun/data.hdf5")
 
 
 
@@ -238,9 +241,77 @@ class ConfigHandler:
 
 
 
-  
+
+# Below code stolen from
+# https://stackoverflow.com/questions/6811902/import-arbitrary-named-file-as-a-python-module-without-generating-bytecode-file
+# This should allow end user to put their python input files in arbitrary locations and be sloppy wih naming them
+# also avoids creating a bytecode compiled version of the user's input file.
+import imp, contextlib
+@contextlib.contextmanager
+def preserve_value(namespace, name):
+    """ A context manager to preserve, then restore, the specified binding.
+
+        :param namespace: The namespace object (e.g. a class or dict)
+            containing the name binding.
+        :param name: The name of the binding to be preserved.
+        :yield: None.
+
+        When the context manager is entered, the current value bound to
+        `name` in `namespace` is saved. When the context manager is
+        exited, the binding is re-established to the saved value.
+
+        """
+    saved_value = getattr(namespace, name)
+    yield
+    setattr(namespace, name, saved_value)
 
 
+def make_module_from_file(module_name, module_filepath):
+    """ Make a new module object from the source code in specified file.
+
+        :param module_name: The name of the resulting module object.
+        :param module_filepath: The filesystem path to open for
+            reading the module's Python source.
+        :return: The module object.
+
+        The Python import mechanism is not used. No cached bytecode
+        file is created, and no entry is placed in `sys.modules`.
+
+        """
+    py_source_open_mode = 'U'
+    py_source_description = (".py", py_source_open_mode, imp.PY_SOURCE)
+
+    with open(module_filepath, py_source_open_mode) as module_file:
+        with preserve_value(sys, 'dont_write_bytecode'):
+            sys.dont_write_bytecode = True
+            module = imp.load_module(
+                    module_name, module_file, module_filepath,
+                    py_source_description)
+
+    return module
+
+
+def import_program_as_module(program_filepath):
+    """ Import module from program file `program_filepath`.
+
+        :param program_filepath: The full filesystem path to the program.
+            This name will be used for both the source file to read, and
+            the resulting module name.
+        :return: The module object.
+
+        A program file has an arbitrary name; it is not suitable to
+        create a corresponding bytecode file alongside. So the creation
+        of bytecode is suppressed during the import.
+
+        The module object will also be added to `sys.modules`.
+
+        """
+    module_name = os.path.basename(program_filepath)
+
+    module = make_module_from_file(module_name, program_filepath)
+    sys.modules[module_name] = module
+
+    return module
 
 
 

@@ -260,7 +260,7 @@ class job:
       search_replace_file(self.dir+tempname, "tdci_fieldfile2 field2.bin", "")
     else:
       self.make_fieldfiles()
-    if (self.n==0 or self.gradjob):
+    if (self.gradjob):
       search_replace_file(self.dir+tempname, "tdci_diabatize_orbs yes", "tdci_diabatize_orbs no")
       if self.ReCn is None:
         search_replace_file(self.dir+tempname, "tdci_recn_readfile recn_init.bin", "")
@@ -699,11 +699,6 @@ class tccontroller:
     return prevjob.N
 
   def grad(self, xyz, ReCn=None, ImCn=None):
-    if self.N == 0:
-      #f = open(xyzpath, 'r')
-      #self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
-      #f.close();del f
-      self.Natoms = len(xyz)
     grad_template = copy.deepcopy(self.TDCI_TEMPLATE)
     # overwrite template to do gradient stuff instead of tdci
     #grad_template["run"] = "gradient"
@@ -719,14 +714,10 @@ class tccontroller:
     j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.gradjob = True
     j.dir = self.JOBDIR+"electronic/grad/"
+    self.prevjob = j
     return j.run_safely()
 
   def hessian(self, xyz, temp):
-    if self.N == 0:
-      #f = open(xyzpath, 'r')
-      #self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
-      #f.close();del f
-      self.Natoms = len(self.FIELD_INFO["atoms"])
     hess_template = copy.deepcopy(self.TDCI_TEMPLATE)
     hess_template["run"] = "frequencies"
     hess_template["to"] = str(temp)
@@ -736,15 +727,7 @@ class tccontroller:
     
 
   def nextstep(self, xyz, ReCn=None, ImCn=None):
-    #print("nextstep: "+str(self.N)+"\n")
-    if self.N == 0:
-      #f = open(xyzpath, 'r')
-      #self.Natoms = int(f.readline()) # Get the number of atoms so we know the dims of the gradient
-      #f.close();del f
-      self.Natoms = len(self.FIELD_INFO["atoms"])
-      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
-    else:
-      j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.jobs[-1], self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
+    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.prevjob, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
     self.jobs.append(j)
     self.N+=1
     return j.run_safely()

@@ -92,7 +92,7 @@ class Ehrenfest:
     if self.tc.config.RESTART:
       x, v, a, t, pe, recn, imcn = self.loadstate()
     else:
-      utils.clean_files() # Clean job directory
+      utils.clean_files(self.tc.config.JOBDIR) # Clean job directory
       geomfilename = self.tc.config.xyzpath # .xyz filename in job directory
       self.atoms, x = utils.xyz_read(geomfilename)
       self.masses = utils.getmasses(self.atoms)
