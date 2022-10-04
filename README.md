@@ -10,7 +10,7 @@ To install h5py for python2 on ubuntu:
 `pip2 install h5py`
 
 To install tab-dms, simply symlink __main__.py to a $PATH directory
-`ln -s /home/adurden/tab-dms/__main__.py /home/adurden/bin/tab`
+`ln -s /home/adurden/tab-dms/\__main__.py /home/adurden/bin/tab`
 
 
 ## Running tab-dms
