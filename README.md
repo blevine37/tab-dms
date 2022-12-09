@@ -9,8 +9,8 @@ To install h5py for python2 on ubuntu:
 `HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/`
 `pip2 install h5py`
 
-To install tab-dms, simply symlink __main__.py to a $PATH directory
-`ln -s /home/adurden/tab-dms/__main__.py /home/adurden/bin/tab`
+To install tab-dms, simply symlink \_\_main__.py to a $PATH directory
+`ln -s /home/$USER/tab-dms/__main__.py /home/$USER/bin/tab`
 
 
 ## Running tab-dms
