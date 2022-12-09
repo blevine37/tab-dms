@@ -2,15 +2,17 @@
 
 
 JOBDIR = "./"
-xyzpath = "h2o.xyz"
+xyzpath = "benzene_perturbed.xyz"
 initial_electronic_state = 0  # S0 = 0, S1 = 1, etc.
 
 RESTART = False
+restart_frame = 62
+restart_hdf5 = "restart.hdf5"
 SCHEDULER = False
 TERACHEM = "/home/adurden/terachem/build/bin/" # directory containing terachem executable
 
 
-TIMESTEP_AU = 5.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attosecond
+TIMESTEP_AU = 4.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attosecond
 
 ########################################
 # TDCI TeraChem Template
@@ -20,21 +22,25 @@ NSTEPS_TDCI = 1000       # Number of electronic timesteps in one nuclear timeste
                          #   Electronic timestep duration will be TIMESTEP_AU / NSTEPS_TDCI
 nfields = 1              # number of distinct fields (generally for multichromatic floquet)
 krylov_end = False       # Generate approximate eigenstates at end of calculation?
-krylov_end_n = 6         # Number of steps to save wfn on to generate approx eigenstates with.
+krylov_end_n = 5         # Number of steps to save wfn on to generate approx eigenstates with.
                          #   There will be 2*krylov_end_n approximate eigenstates returned.
 krylov_end_interval = 20 # Number of steps between saved steps.
 TDCI_TEMPLATE = {
   "gpus"                 : "1 0",
   "precision"            : "double",
-  #"threall"              : "1.0e-20",
-  #"convthre"             : "1.0e-6",
+  "threall"              : "1.0e-18",
+  "convthre"             : "5.0e-10",
+  "dciconvtol"           : "6.0e-13",
+  "cphftol"              : "1.0e-10",
   #"basis"                : "6-311++g[2d,2p]",
-  "basis"                : "sto-3g",
+  #"basis"                : "sto-3g",
+  #"basis"                : "3-21g",
+  "basis"                : "3-21g",
   "method"               : "hf",
   "charge"               : "0",
   "spinmult"             : "1",
   "csf_basis"            : "no",
-  "sphericalbasis"       : "no", # sometimes this fixes norm problems, sometimes it causes them!
+  "sphericalbasis"       : "no",
   "tdci_eshift"          : "gs",
   "tdci_stepprint"       : "1",
   "tdci_laser_freq"      : "0.0",
@@ -46,35 +52,15 @@ TDCI_TEMPLATE = {
   "tdci_write_field"     : "no",
   "tdci_floquet"         : "no",
   "tdci_floquet_photons" : "4",
-  #"cisno"                : "yes",
-  #"cisnostates"          : "6",
-  #"cisnumstates"         : "6",
-  #"cisguessvecs"         : "8",
-  #"cismaxiter"           : "500",
-  #"cisconvtol"           : "1.0e-8",
   "cpcisiter"            : "350",
-  "fon"                  : "no",
-  "fon_method"           : "gaussian",
-  "fon_temperature"      : "0.125",
   #"fon_mix"              : "no",
-  #"casscf"               : "no",
   "casci"                : "yes",  # no if using CISNO or CASSCF
   "ci_solver"            : "direct",
   "dcimaxiter"           : "300",
   "dciprintinfo"         : "yes",
   "dcipreconditioner"    : "orbenergy",
-  #"closed"               : "18",
-  #"active"               : "6",
-  #"closed"               : "6",   # Ethylene 4/4
-  #"active"               : "4",
-  #"closed"               : "4", # Ethylene 8/8
-  #"active"               : "8", 
-  #"closed"               : "7", # Ethylene 2/2
-  #"active"               : "2", 
-  "closed"               : "0", # H2O STO-3G full CI
-  "active"               : "7",
-  #"closed"               : "0", # H2O bigbasis
-  #"active"               : "10",
+  "closed"               : "18", # Ethylene 2/2
+  "active"               : "6", 
   "cassinglets"          : "3",
   "castriplets"          : "0",
   "cascharges"           : "no", # Turning extra analyses off to save time
@@ -83,9 +69,16 @@ TDCI_TEMPLATE = {
   #"tdci_sanitytest"      : "no",
 
   # orbital options
-  #"fon"                  : "yes",
-  #"fon_method"           : "gaussian",
-  #"fon_temperature"      : "0.25",
+  "fon"                  : "yes",
+  "fon_method"           : "gaussian",
+  "fon_temperature"      : "0.15",
+  #"cisno"                : "yes",
+  #"cisnostates"          : "6",
+  #"cisnumstates"         : "6",
+  #"cisguessvecs"         : "8",
+  #"cismaxiter"           : "500",
+  #"cisconvtol"           : "1.0e-8",
+  #"casscf"               : "no",
 
 }
 

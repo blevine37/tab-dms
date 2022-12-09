@@ -51,88 +51,134 @@ class Ehrenfest:
     return accs
 
   def ke_calc(self, v):
+    print(v)
     ke = 0 # Initialize energy variable
     # Iterate over masses
     for m_i, v_i in zip(self.masses, v):
       ke += m_i * v_i.dot(v_i) / 2
     return ke
 
-  def savestate(self, x, v, a, t, pe, TCdata):
+  def savestate(self, x, v, v_half, a, t, TCdata, atoms=None):
     # Update HDF5
+    data = { 'x'         : x,
+             'v'         : v,
+             'v_half'    : v_half,
+             'a'         : a,
+             'ke'        : self.ke_calc(v),
+             'time'      : t,
+              }
+    if TCdata is None:
+      import pdb; pdb.set_trace()
+      data.update({ 
+                    'pe'        : 0,
+	            'tdci_dir'  : "",
+                 })
+
+    else:
+      data.update({ 
+                    'pe'        : TCdata['eng'],
+		    'recn_half' : TCdata['recn'],
+	            'imcn_half' : TCdata['imcn'],
+	            'tdci_dir' : TCdata['tdci_dir'],
+                 })
+
+    if atoms is not None:
+      data['atoms'] = atoms
     self.logprint("Updating HDF5")
-    ke = self.ke_calc(v)
     # TODO: save the tdci directory and other stuff from TCdata
-    utils.h5py_update(x, v, a, pe, ke, t, TCdata)
+    utils.h5py_update(data)
     # Print HDF5 contents
     self.logprint("Printing HDF5 contents")
     utils.h5py_printall()
 
   def loadstate(self):
-    h5f = h5py.File('data.hd5f','r')
-    fields = ['atoms', 'geom','vels','accs','poten','kinen','time']
-    for field in fields:
-      if field not in h5f.keys():
-	print("h5 file uninitialized")
-	os.kill()
-    x_curr = h5f['geom'][-1]
-    v_curr = h5f['geom'][-1]
-    a_curr = h5f['geom'][-1]
-    pe_curr = h5f['geom'][-1]
-    ke_curr = h5f['geom'][-1]
-    t = h5f['time'][-1]
-    recn = h5f['recn']
-    imcn = h5f['imcn']
-    self.tc.N = len(h5f['geom'])
-    return x_curr, v_curr, a_curr, t, pe_curr, recn, imcn
+    config = self.tc.config
+    N = int(config.restart_frame)
+    x_, v_half_, a_, t_, recn_, imcn_, self.atoms = utils.h5py_copy_partial(config.restart_hdf5, config.restart_frame, config)
+    time.sleep(2)
+    self.tc.N = config.restart_frame
+    self.tc.restart_setup()
+    print(( x_, v_half_, a_, t_, recn_, imcn_))
+    return x_, v_half_, a_, t_, recn_, imcn_
     
   # Prepare initial state and start propagation.
   def run_ehrenfest(self):
     x, v, a, pe, recn, imcn = None, None, None, None, None, None
     t = 0
     if self.tc.config.RESTART:
-      x, v, a, t, pe, recn, imcn = self.loadstate()
+      x, v, a, t, recn, imcn = self.loadstate()
     else:
       utils.clean_files(self.tc.config.JOBDIR) # Clean job directory
       geomfilename = self.tc.config.xyzpath # .xyz filename in job directory
       self.atoms, x = utils.xyz_read(geomfilename)
+      #utils.h5py_update({'atoms': self.atoms})
       self.masses = utils.getmasses(self.atoms)
-      v = np.zeros([len(self.atoms), 3]) # Initial velocity
       # Call Terachem to Calculate states
       gradout = self.tc.grad(x) # x should already be in angstroms here
+      t = 0.0
       recn = gradout["states"][self.tc.config.initial_electronic_state]
       imcn = np.zeros(len(recn))
-      # Run ANOTHER grad calculation with our initial CI vector
-      TCdata_init = self.tc.grad(x, recn, imcn)
-      pe = TCdata_init["eng"]
-      a = self.getAccel(TCdata_init["grad"], recn, imcn)
-      print("a init:"+str(a))
-      #a = np.zeros([len(atoms),3]) # ignore gradient for one step...
       x = x / bohrtoangs # Initial geometry in Bohr
-    self.propagate(x, v, a, t, pe, recn, imcn)
+      v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
+      a = np.zeros([len(self.atoms), 3]) # Accel at t=0
+      v, a, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep!! \(^0^)/
+      self.savestate(x, v_timestep, v, a, t, TCdata, atoms=self.atoms) # Save initial state?
+
+    self.propagate(x, v, t, recn, imcn)
     
 
   # Does Ehrenfest propagation loop
-  def propagate(self, x_init, v_init, a_init, t_init, pe_init, ReCn_init, ImCn_init=None):
+  
+  # t_init    : time t
+  # x_init    : Coordinates at time t
+  # v_init    : Velocity at t+(dt/2)
+  # ReCn_init : Real CI Vector at time t+(dt/2)
+  # ImCn_init : Imaginary CI Vector at time t+(dt/2)
+  # 
+  def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
     t = t_init
-    x, v, a, pe, ReCn, ImCn = x_init, v_init, a_init, pe_init, ReCn_init, ImCn_init
+    x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
+    a = 0.0 # initial acceleration is not used
     TCdata = None
-    self.savestate(x, v, a, t, pe, TCdata)
     for it in range(0,99999999): # go forever! :D
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
-      x, v, a, TCdata = self.step(x, v, a, ReCn=ReCn, ImCn=ImCn) # Do propagation step
+      #xprev = np.copy(x)
+      x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
       ReCn, ImCn = None, None # Defaults to =TCdata["recn"],TCdata["imcn"] from prevstep.
-      self.savestate(x, v, a, t, TCdata["eng"], TCdata)
+      #self.savestate(xprev, v_timestep, v, a, t, TCdata)
+      self.savestate(x, v_timestep, v, a, t, TCdata)
       self.logprint("Iteration " + str(it).zfill(4) + " finished")
       
     
   # Accepts current state, runs TDCI, calculates next state.
-  def step(self, x, v, a, ReCn=None, ImCn=None):
-    logprint = self.logprint
-    x_next = x + v*self.delta + (a*self.delta**2)/2.
+  # Input:
+  #  x      : Coordinates at time t-dt
+  #  v      : Velocity at time t-(dt/2)
+  # Output:
+  #  x_next     : Coordinates at time t
+  #  v_timestep : Velocity at time t
+  #  v_next     : Velocity at time t+(dt/2)
+  #  a          : Acceleration at time t
+  #  TCdata     : Return dictionary from tccontroller TDCI job from t-(dt/2) to t+(dt/2)
+  def step(self, x, v, ReCn=None, ImCn=None):
+    x_next = x + v*self.delta
     TCdata = self.tc.nextstep(x_next*bohrtoangs, ReCn=ReCn, ImCn=ImCn) # Do TDCI! \(^0^)/
-    a_next = self.getAccel(TCdata["grad_half"], TCdata["recn"], TCdata["imcn"])
-    v_next = v + (a + a_next) * self.delta / 2
-    return x_next, v_next, a_next, TCdata
+    a = self.getAccel(TCdata["grad_half"], TCdata["recn"], TCdata["imcn"])
+    v_timestep = v + a*self.delta/2.
+    v_next = v + a*self.delta
+    return x_next, v_timestep, v_next, a, TCdata
     
-
+  # Input:
+  #  x      : Coordinates at time t
+  #  v      : Velocity at time t
+  # Output: 
+  #  v_next : Velocity at time t+(dt/2)
+  #  a      : Acceleration at time t
+  #  TCdata : Return dictionary from tccontroller TDCI job from t to t+(dt/2)
+  def halfstep(self, x, v, ReCn=None, ImCn=None):
+    TCdata = self.tc.halfstep(x*bohrtoangs, ReCn=ReCn, ImCn=ImCn) # Do TDCI! \(^0^)/
+    a = self.getAccel(TCdata["grad"], TCdata["recn"], TCdata["imcn"])
+    print((v, a, self.delta))
+    v_next = v + a*self.delta/2.
+    return v_next, a, TCdata
 

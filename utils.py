@@ -2,6 +2,7 @@
 import os, sys, shutil, time
 import numpy as np
 import h5py
+import subprocess
 ########################################
 # Constants
 ########################################
@@ -84,67 +85,182 @@ def getmasses(atoms):
 
 
 
-
-
 ########################################
 # h5py
 ########################################
 # time in attoseconds
-def h5py_update(x, v, a, pe, ke, Time, TCdata=None):
+def h5py_update(data):
+  #import pdb; pdb.set_trace()
 
   # Get array dimension
-  n = x.shape[0]
+  n = 0
+  if 'atoms' in data: 
+    n = len(data['atoms'])
+  else:
+    n = data['x'].shape[0]
   ndets = 0
-  #if ReCn is not None:
-  #  ndets = len(ReCn)
+  try:
+    ndets = len(data['recn_half'])
+  except:
+   pass
 
   # Open h5py file
   h5f = h5py.File('data.hdf5', 'a')
 
   # Create datasets
-  if len(list(h5f.keys())) == 0 :
-    print('Creating datasets')
-    # why doesnt this work ;-;
-    #h5f.create_dataset('atoms', (1,n), maxshape=(1,n), dtype=h5py.string_dtype('utf-8',30))
-    #h5f['atoms'] = atoms
-    h5f.create_dataset('recn', (0, ndets), maxshape=(None, ndets), dtype='float64')
-    h5f.create_dataset('imcn', (0, ndets), maxshape=(None, ndets), dtype='float64')
+  if 'atoms' not in h5f.keys():
 
     str_dtype = h5py.special_dtype(vlen=str)
-    h5f.create_dataset('tdci_dir', (100,), maxshape=(None,), dtype=str_dtype)
+    h5f.create_dataset('atoms', (1, n), maxshape=(1, n), dtype=str_dtype)
 
+    h5f.create_dataset('tdci_dir', (0,), maxshape=(None,), dtype=str_dtype)
     h5f.create_dataset('x', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
     h5f.create_dataset('v', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
+    h5f.create_dataset('v_half', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
     h5f.create_dataset('a', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
     h5f.create_dataset('pe', (0,), maxshape=(None,), dtype='float64')
     h5f.create_dataset('ke', (0,), maxshape=(None,), dtype='float64')
     h5f.create_dataset('time', (0,), maxshape=(None,), dtype='float64')
 
-  # Resize
-  for key in ['x','v','a','pe','ke','time', 'tdci_dir', 'recn', 'imcn']:
-    dset = h5f[key]
-    dset.resize(dset.len() + 1, axis=0)
+  if (('recn_half' in data.keys()) and ('recn_half' not in h5f.keys())):
+    ndets = len(data['recn_half'])
+    h5f.create_dataset('recn_half', (1, ndets), maxshape=(None, ndets), dtype='float64')
+    h5f.create_dataset('imcn_half', (1, ndets), maxshape=(None, ndets), dtype='float64')
 
-  # Store data
-  h5f['x'][-1] = x
-  h5f['v'][-1] = v
-  h5f['a'][-1] = a
-  h5f['pe'][-1] = pe
-  h5f['ke'][-1] = ke
-  h5f['time'][-1] = Time
-  if TCdata is None:
-    h5f['recn'][-1] = np.zeros(ndets)
-    h5f['imcn'][-1] = np.zeros(ndets)
-    h5f['tdci_dir'][-1] = ""
-  else:
-    h5f['recn'][-1] = TCdata["recn"]
-    h5f['imcn'][-1] = TCdata["imcn"]
-    h5f['tdci_dir'][-1] = TCdata["tdci_dir"]
+
+  static_keys = ['atoms']
+  for key in h5f.keys():
+    dset = h5f[key]
+    if key not in static_keys:
+      dset.resize(dset.len() + 1, axis=0)
+    if key in data:
+      dset[-1] = data[key]
+
   # Close
   h5f.close()
   # had an error earlier when the h5 file was opened again before it was finished closing
   # think that might be due to filesystem lag or something idk so here's a sleep
-  time.sleep(2)
+  time.sleep(1)
+
+
+def h5py_copy_partial(oldh5f, lastframe, config):
+  #new_oldfile = "".join(oldh5f.split(".")[:-1])
+  #shutil.copy(oldh5f, new_oldfile+"_old.hdf5" )
+  new_oldfile = oldh5f
+  dirpath = os.path.dirname(oldh5f)
+  if dirpath != "": dirpath=dirpath+"/"
+  if os.path.exists(dirpath+"data.hdf5"):
+     shutil.move(dirpath+"data.hdf5", dirpath+"data_old.hdf5")
+  if os.path.basename(oldh5f) == "data.hdf5":
+     new_oldfile = dirpath+"data_old.hdf5"
+
+  oldh = h5py.File(new_oldfile, 'r')
+  print("Writing data.hdf5 to path:")
+  print(dirpath+"data.hdf5")
+  h5f = h5py.File(dirpath+"data.hdf5", 'a')
+  
+  maxn = oldh['x'].shape[0]
+  natoms = oldh['x'].shape[1]
+  ndets = oldh['recn_half'].shape[1]
+
+  if maxn < lastframe:
+    raise ValueError('Tried to restart on frame '+str(lastframe)+', but '+str(oldh5f)+' only has '+str(maxn)+' frames.')
+
+  # Create new datasets
+  
+  n = natoms
+  str_dtype = h5py.special_dtype(vlen=str)
+  h5f.create_dataset('atoms', (1, n), maxshape=(1, n), dtype=str_dtype)
+
+  h5f.create_dataset('tdci_dir', (lastframe,), maxshape=(None,), dtype=str_dtype)
+  h5f.create_dataset('x', (lastframe, n, 3), maxshape=(None, n, 3), dtype='float64')
+  h5f.create_dataset('v', (lastframe, n, 3), maxshape=(None, n, 3), dtype='float64')
+  h5f.create_dataset('v_half', (lastframe, n, 3), maxshape=(None, n, 3), dtype='float64')
+  h5f.create_dataset('a', (lastframe, n, 3), maxshape=(None, n, 3), dtype='float64')
+  h5f.create_dataset('pe', (lastframe,), maxshape=(None,), dtype='float64')
+  h5f.create_dataset('ke', (lastframe,), maxshape=(None,), dtype='float64')
+  h5f.create_dataset('time', (lastframe,), maxshape=(None,), dtype='float64')
+
+  h5f.create_dataset('recn_half', (lastframe, ndets), maxshape=(None, ndets), dtype='float64')
+  h5f.create_dataset('imcn_half', (lastframe, ndets), maxshape=(None, ndets), dtype='float64')
+
+  # Copy data
+  #static_keys = ['atoms', 'tdci_dir']
+  static_keys = ['atoms']
+  h5f['atoms'][0] = oldh['atoms'][0]
+  for key in h5f.keys():
+    if key in static_keys: continue
+    for i in range(0,lastframe):
+      #print((key, i, h5f[key][i], oldh[key][i]))
+      sys.stdout.flush()
+      h5f[key][i] = oldh[key][i]
+
+  # Copy all the stuff to restart job lastframe
+  
+  # Rename old TDCI subdirectory, create new one
+  #shutil.move(config.JOBDIR+"electronic", config.JOBDIR+"electronic_old")
+  if os.path.exists(config.JOBDIR+"electronic_orig"):
+    p = subprocess.Popen('rm -rf '+config.JOBDIR+'electronic_orig', shell=True)
+    p.wait()
+  p = subprocess.Popen('mv '+config.JOBDIR+'electronic '+config.JOBDIR+'electronic_orig', shell=True)
+  p.wait()
+  p = subprocess.Popen('mkdir '+config.JOBDIR+'electronic', shell=True)
+  p.wait()
+  # Get directories of prevjob and current job
+  prevjob_dir = oldh['tdci_dir'][lastframe-1].split("/")
+  prevjob_dir[-3] = 'electronic_orig' # [-3] should be 'electronic'
+  prevjob_dir = "/".join(prevjob_dir)
+  newjob_dir = oldh['tdci_dir'][lastframe]
+  newjob_old = oldh['tdci_dir'][lastframe].split("/")
+  newjob_old[-3] = 'electronic_orig' # [-3] should be 'electronic'
+  new_N = newjob_old[-2]
+  newjob_old = "/".join(newjob_old)
+  
+  p = subprocess.Popen('cp -r '+prevjob_dir+" "+oldh['tdci_dir'][lastframe-1], shell=True)
+  p.wait()
+  p = subprocess.Popen('mkdir '+oldh['tdci_dir'][lastframe], shell=True)
+  p.wait()
+  # Set up new jobfiles
+  # These are actually just discarded...
+  p = subprocess.Popen('cp '+prevjob_dir+"NewCoors.bin "+newjob_dir+"/PrevCoors.bin ;"+
+                       'cp '+prevjob_dir+"NewC.bin "+newjob_dir+"/PrevC.bin ;"+
+                       'cp '+prevjob_dir+"ReCn_end.bin "+newjob_dir+"/recn_init.bin ;"+
+                       'cp '+prevjob_dir+"ImCn_end.bin "+newjob_dir+"/imcn_init.bin ;"+
+                       'cp '+prevjob_dir+"field0.bin "+newjob_dir+"/field0.bin ;"+
+                       'cp '+newjob_old+"temp.xyz "+newjob_dir+"/temp.xyz ;"+
+                       'cp '+newjob_old+"test"+new_N+".in "+newjob_dir+"/test"+new_N+".in ;", shell=True)
+  p.wait()
+
+  # Copy all previous jobs so electronic/ contains the full simulation
+  temppath = oldh['tdci_dir'][0].split("/")
+  temppath[-2] = "grad"
+  newpath = "/".join(temppath)
+  temppath[-3] = 'electronic_orig' # [-3] should be 'electronic'
+  temppath = "/".join(temppath)
+  p = subprocess.Popen('cp -r '+temppath+" "+newpath, shell=True)
+  p.wait()
+  #for i in range(0, lastframe-2):
+  for i in range(0, lastframe-1):
+    temppath = oldh['tdci_dir'][i].split("/")
+    temppath[-3] = 'electronic_orig' # [-3] should be 'electronic'
+    temppath = "/".join(temppath)
+    p = subprocess.Popen('cp -r '+temppath+" "+oldh['tdci_dir'][i], shell=True)
+    p.wait()
+  
+
+
+  #x = xyz_read(newjob_dir+"/temp.xyz")[1]
+  x = xyz_read(prevjob_dir+"/temp.xyz")[1]/bohrtoangs
+  v_half = np.array(h5f['v_half'][lastframe-1])
+  a = np.array(h5f['a'][lastframe-1])
+  t = float(h5f['time'][lastframe-1])
+  recn = None # Ugh we're not storing recn_end in hdf5...
+  imcn = None
+  atoms = list(h5f['atoms'][0])
+  oldh.close()
+  h5f.close()
+  time.sleep(1)
+  return x, v_half, a, t, recn, imcn, atoms
 
 def h5py_printall():
 
@@ -166,19 +282,25 @@ def h5py_printall():
     pot = poten[it]
     kin = kinen[it]
     tot = pot + kin
-    print(('{:25.17f}'*3).format(pot, kin, tot))
+    print(('{:5d} {:06.0f} '+'{:25.17f}'*3).format( it, h5f['time'][it], pot, kin, tot))
   print("")
 
   # Close
   h5f.close()
 
 
+# Prints the last TDCI job in an electronic/ folder
+def lastfolder(electronicdir):
+  folders = os.listdir(electronicdir)
+  folders.sort(reverse=True, key=lastfolder_sort)
+  return folders[0]
 
-
-
-
-
-
+# sorting method for lastfolder()
+def lastfolder_sort(element):
+  try:
+    return int(element)
+  except:
+    return 0
 
 # Takes inputfile.py module and copies its namespace to this class instance
 # Then modifies stuff that the user shouldn't touch.
@@ -188,6 +310,9 @@ class ConfigHandler:
     self.JOBDIR = config.JOBDIR
     self.initial_electronic_state = config.initial_electronic_state
     self.RESTART = config.RESTART
+    if self.RESTART: # Shouldnt need to include them if you're not restarting.
+      self.restart_frame = config.restart_frame
+      self.restart_hdf5 = config.restart_hdf5
     self.SCHEDULER = config.SCHEDULER
     self.TERACHEM = config.TERACHEM
     self.TIMESTEP_AU = config.TIMESTEP_AU # Dynamics time step in atomic units

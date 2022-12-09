@@ -6,6 +6,8 @@ import numpy as np
 import struct, shutil, os, sys, subprocess, time
 import copy
 
+
+# Constants
 FStoAU = 41.341375
 EPSILON_C = 0.00265316
 E_FIELD_AU = 5.142206707E+11
@@ -13,7 +15,8 @@ E_FIELD_AU = 5.142206707E+11
 np.set_printoptions(precision=4)
 np.set_printoptions(linewidth=np.inf)
 
-# TCPB uses what im calling "tcstring" 
+# TCPB uses what i'm calling "tcstring" here
+# TODO: add TCPB support :)
 def tcstring_to_xyz(atoms,geom,filename):
   f = open(filename,'w')
   f.write(str(len(atoms))+"\n\n")
@@ -66,6 +69,7 @@ def xyz_read(filename):
 
 
 # Used to sort input file dictionaries into something a little more human-readable
+# before writing them as a file
 def dictkey(key):
   keylist = ["gpus", "timings", "precision", "threall", "convthre", "basis", 
              "coordinates", "method", "run", "to", "charge", "spinmult", "csf_basis",
@@ -75,9 +79,9 @@ def dictkey(key):
              "tdci_floquet", "tdci_floquet_photons", "tdci_krylov_end", "tdci_krylov_end_n",
              "tdci_krylov_end_interval", "tdci_diabatize_orbs", "tdci_recn_readfile",
              "tdci_imcn_readfile", "tdci_prevorbs_readfile", "tdci_prevcoords_readfile",
-             "tdci_gradient", "tdci_grad_init", "tdci_grad_half", "tdci_fieldfile0", "tdci_fieldfile1",
-             "tdci_fieldfile2", "tdci_fieldfile3", "tdci_fieldfile4",
-             "casci", "ci_solver", "dcimaxiter",
+             "tdci_gradient", "tdci_grad_init", "tdci_grad_half", "tdci_fieldfile0",
+             "tdci_fieldfile1", "tdci_fieldfile2", "tdci_fieldfile3", "tdci_fieldfile4",
+             "casci", "fon", "fon_method", "fon_temperature", "ci_solver", "dcimaxiter",
              "dciprintinfo", "dcipreconditioner", "closed", "active", "cassinglets",
              "casdoublets", "castriples", "casquartets", "cascharges", "cas_ntos",]
   if key in keylist:
@@ -204,7 +208,7 @@ class molden:
     
 
 class job:
-  def __init__(self, n, Natoms, Nkrylov, ReCn, ImCn, xyz, pjob, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False):
+  def __init__(self, n, Natoms, Nkrylov, ReCn, ImCn, xyz, pjob, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False, halfstep=False, noclean=False):
     self.n = n
     self.Natoms = Natoms
     self.Nkrylov = Nkrylov
@@ -212,11 +216,15 @@ class job:
     self.ImCn = ImCn
     self.xyz = xyz
     self.pjob = pjob
-    self.dir = JOBDIR+"electronic/"+str(n)+"/"
+    if halfstep:
+      self.dir = JOBDIR+"electronic/"+str(n)+"h/"
+    else:
+      self.dir = JOBDIR+"electronic/"+str(n)+"/"
+    self.halfstep = halfstep
     self.JOBDIR=JOBDIR
     self.JOB_TEMPLATE=JOB_TEMPLATE # contents of bash script that runs tc (with tempdir and tempname)
     self.TDCI_TEMPLATE=TDCI_TEMPLATE # dictionary of terachem options written to input file
-    self.SCHEDULER=SCHEDULER # Unimplemented: will interface with standard scheduler 
+    self.SCHEDULER=SCHEDULER # Unimplemented: will interface with SLURM 
     self.FIELD_INFO = FIELD_INFO
     self.ndets = 0
     self.nmo = 0
@@ -224,7 +232,9 @@ class job:
     self.restarts = 0
     self.gradjob = False
     self.logger = logger
-    self.clean_files()
+    self.noclean = noclean
+    if not noclean:
+      self.clean_files()
 
   def start(self):
     p = subprocess.Popen( 'bash '+self.dir+'tdci.job', shell=True)
@@ -237,10 +247,7 @@ class job:
 
   def make_files(self):
     makedirs(self.dir)
-    #shutil.copy(self.xyzpath, self.dir+self.xyzpath.split("/")[-1]) # copy xyzfile
     xyz_write(self.FIELD_INFO["atoms"], self.xyz, self.dir+"temp.xyz")
-    # Old code from when JOB_TEMPLATE was a path to a file
-    #shutil.copy(self.JOB_TEMPLATE, self.dir+"/tdci.job")
     with open(self.dir+"tdci.job", 'w') as templatefile:
       templatefile.write(self.JOB_TEMPLATE)
     time.sleep(1) # make sure file gets written and closed properly
@@ -248,19 +255,14 @@ class job:
     search_replace_file(self.dir+"tdci.job", "tempname", "test"+str(self.n))
     
     tempname = "test"+str(self.n)+".in"
-    #if self.gradjob:
-    #  tempname = "grad.in"
-    #shutil.copy(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
     dict_to_file(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
-    #search_replace_file(self.dir+tempname, "coords.xyz", self.xyzpath.split("/")[-1]) 
-    #search_replace_file(self.dir+tempname, "coords.xyz", "temp.xyz") # screw it, why not hardcode it
     if self.gradjob:
       search_replace_file(self.dir+tempname, "tdci_fieldfile0 field0.bin", "")
       search_replace_file(self.dir+tempname, "tdci_fieldfile1 field1.bin", "")
       search_replace_file(self.dir+tempname, "tdci_fieldfile2 field2.bin", "")
     else:
       self.make_fieldfiles()
-    if (self.gradjob):
+    if (self.gradjob) or (self.n==0):
       search_replace_file(self.dir+tempname, "tdci_diabatize_orbs yes", "tdci_diabatize_orbs no")
       if self.ReCn is None:
         search_replace_file(self.dir+tempname, "tdci_recn_readfile recn_init.bin", "")
@@ -299,15 +301,13 @@ class job:
     # Field file should include values for half-steps, so the length of the array
     #   should be 2*nsteps!
     FStoAU = 41.341375
-    T = self.FIELD_INFO["tdci_simulation_time"]
-    N = self.FIELD_INFO["nstep"]
-    t = np.linspace( self.n*T*FStoAU, (self.n+1)*T*FStoAU, 2*N)
+    T = float(self.TDCI_TEMPLATE["tdci_simulation_time"])
+    N = int(self.TDCI_TEMPLATE["tdci_nstep"])
+    # half is 0 if we start evenly on timestep, 0.5 if start on half timestep
+    half = self.FIELD_INFO["half"]/2.
+    t = np.linspace( (self.n+half)*T*FStoAU, (self.n+half+1)*T*FStoAU, 2*N)
     for i in range(0, self.FIELD_INFO["nfields"]):
       vals = self.FIELD_INFO["f"+str(i)](t)
-      #fieldfile = open(self.dir+"field"+str(i)+".csv", "w")
-      #for v in vals:
-      #  fieldfile.write( '{:11.8e}'.format(v) + "," )
-      #fieldfile.close()
       write_bin_array(vals,self.dir+"field"+str(i)+".bin")
 
   def check_output(self,output):
@@ -349,8 +349,9 @@ class job:
     # Run the job
     retries = 0
     while (retries < 3):
-      self.clean_files()
-      self.make_files()
+      if not self.noclean:
+        self.clean_files()
+        self.make_files()
       p = self.start()
       logprint("Started "+str(self.dir)+"\n")
       finished = False
@@ -598,7 +599,8 @@ class job:
         S_prediab = read_bin_array(self.dir+"S_MIXED_MO_active.bin", acti**2)
         S_prediab.resize((acti,acti))
         for i in range(0,acti):
-          if S_prediab[i][i] < 0.5: logprint("WARNING: S_prediab["+str(i)+"]["+str(i)+"] = "+str(S_prediab[i][i]))
+          if np.abs(S_prediab[i][i]) < 0.5: logprint("WARNING: S_prediab["+str(i)+"]["+str(i)+"] = "+str(S_prediab[i][i]))
+          if np.linalg.norm(S_prediab[i]) < 0.9: logprint("WARNING: norm(S_prediab["+str(i)+"]) = "+str(np.linalg.norm(S_prediab[i])))
       else: printS = False
 
     #normpop = self.scan_normpop()
@@ -653,6 +655,9 @@ class tccontroller:
   def __init__(self, config, logger):
     self.config = config
     self.N = 0
+    # halfstep is True if the next job should start on a half-timestep
+    #   Since Ehrenfest does a halfstep first and then only fullsteps, 
+    #   this should be true during the entire propagation loop 
     self.jobs = []
     self.prevjob = None
     self.JOBDIR=config.JOBDIR
@@ -662,12 +667,26 @@ class tccontroller:
     self.TDCI_TEMPLATE=config.TDCI_TEMPLATE
     self.SCHEDULER=config.SCHEDULER
     self.FIELD_INFO=config.FIELD_INFO
+    self.FIELD_INFO["half"] = 0 
     self.Natoms = len(config.FIELD_INFO["atoms"])
     self.Nkrylov = 2*config.FIELD_INFO["krylov_end_n"]
     self.logger = logger
     self.RESTART = config.RESTART
-    if self.RESTART:
-      self.restart()
+    #if self.RESTART:
+    #  self.restart()
+
+  # Need to populate self.prevjob so orbital diabatization takes place
+  # start job with noclean so that we can use the files setup by reading hdf5
+  def restart_setup(self):
+    self.FIELD_INFO["half"] = 1 
+    print("Setting prevjob: "+str(self.N-1))
+    xyz = np.zeros((self.Natoms,3)) # need one to make a job instance, should be fine since we're not running it.
+    j = job( self.N-1, self.Natoms, self.Nkrylov, None, None, xyz, 
+	     None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, 
+	     logger=self.logger, SCHEDULER=self.SCHEDULER, noclean=True )
+    self.prevjob = j
+    
+    
 
   # find the last valid TDCI calculation for continuity, return step number.
   def restart(self):
@@ -727,12 +746,27 @@ class tccontroller:
     
 
   def nextstep(self, xyz, ReCn=None, ImCn=None):
+    print("creating job step: "+str(self.N))
     j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.prevjob, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
-    self.jobs.append(j)
+    output = j.run_safely()
     self.N+=1
-    return j.run_safely()
+    self.prevjob = j
+    return output
     
 
+  def halfstep(self, xyz, ReCn=None, ImCn=None):
+    halfstep_template = copy.deepcopy(self.TDCI_TEMPLATE)
+    halfstep_template["tdci_simulation_time"] = str(float(halfstep_template["tdci_simulation_time"])/2.)
+    halfstep_template["tdci_nstep"] = str( int( int(halfstep_template["tdci_nstep"])/2))
+    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.prevjob, self.JOBDIR, self.JOB_TEMPLATE, halfstep_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER, halfstep=True)
+    output = j.run_safely()
+    if self.FIELD_INFO["half"]:
+      self.N+=0
+    else:
+      self.N+=1
+    self.FIELD_INFO["half"] = (self.FIELD_INFO["half"] + 1) % 2 # Align field with halfsteps
+    self.prevjob = j
+    return output
     
 
     

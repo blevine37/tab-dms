@@ -52,7 +52,7 @@ logprint("=================")
 
 # Time steps
 logprint("Propagation time step in au: " + str(config.TIMESTEP_AU))
-logprint("TDCI simulation half time step in fs: " + str(config.tdci_simulation_time))
+logprint("TDCI simulation time step in fs: " + str(config.tdci_simulation_time))
 logprint("")
 
 # Do Ehrenfest dynamics!
