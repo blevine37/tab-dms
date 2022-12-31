@@ -421,7 +421,6 @@ class ConfigHandler:
     self.SCHEDULER = config.SCHEDULER
     self.TERACHEM = config.TERACHEM
     self.TIMESTEP_AU = config.TIMESTEP_AU # Dynamics time step in atomic units
-    self.MAXITERS = config.MAXITERS
     self.nstep = config.NSTEPS_TDCI
     self.nfields = config.nfields
     self.krylov_end = config.krylov_end
@@ -431,6 +430,14 @@ class ConfigHandler:
     self.job_template_contents = config.job_template_contents
     self.JOB_TEMPLATE = config.job_template_contents
     self.f0_values = config.f0_values
+
+    self.FIX_FOMO = False
+    try: self.FIX_FOMO = config.FIX_FOMO
+    except: pass
+
+    self.MAXITERS = 999999999999999
+    try: self.MAXITERS = config.MAXITERS
+    except: pass
 
     self.atoms, self.xyz = xyz_read(config.xyzpath)
     self.xyzpath = config.xyzpath

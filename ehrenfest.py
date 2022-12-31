@@ -88,8 +88,8 @@ class Ehrenfest:
     # TODO: save the tdci directory and other stuff from TCdata
     utils.h5py_update(data)
     # Print HDF5 contents
-    self.logprint("Printing HDF5 contents")
-    utils.h5py_printall()
+    #self.logprint("Printing HDF5 contents")
+    #utils.h5py_printall()
 
   def loadstate(self):
     config = self.tc.config
@@ -141,13 +141,13 @@ class Ehrenfest:
     x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
     a = 0.0 # initial acceleration is not used
     TCdata = None
-    while it < self.tc.config.maxiters: # go forever! :D
+    while it < self.tc.config.MAXITERS: # go forever! :D
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
       x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
       ReCn, ImCn = TCdata["recn"], TCdata["imcn"]
       # Check for errors that need to modify propagation 
-      if (self.config.FIX_FOMO and (TCdata["error"] == "FOMO GRADIENT ERROR")):
+      if (self.tc.config.FIX_FOMO and (TCdata["error"] == "FOMO GRADIENT ERROR")):
         self.logprint("=====ERROR!!!!======")
         self.logprint("FOMO GRADIENT ISSUE DETECTED")
         self.logprint("Skipping this geometry by doing two half-length TDCIs")
@@ -157,12 +157,12 @@ class Ehrenfest:
         v_, a_, TCdata_ = self.halfstep(x_prev, v_prev, ReCn_prev, ImCn_prev)
         # Propagate x_(it) to x_(it+1) using the grad from x_(it-1) at time t
         x_next = x + v_*self.delta
-        self.savestate(x, v_, a_, t, TCdata_)
         self.logprint("First half-step complete")
         # Now catch the electronic structure up to t+dt
         v_2, a_2, TCdata_2 = self.halfstep(x_next, v_, TCdata_["recn"], TCdata_["imcn"])
         x, v, ReCn, ImCn = x, v_, TCdata_2["recn"], TCdata_2["imcn"]
         self.logprint("Second half-step complete")
+        self.savestate(x, v_, v_2, a_, t, TCdata_) # Triple-check the correctness of v_ and v_2 here...
       else:
 	self.savestate(x, v_timestep, v, a, t, TCdata)
       self.logprint("Iteration " + str(it).zfill(4) + " finished")

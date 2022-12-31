@@ -40,6 +40,9 @@ def xyz_to_tcstring(filename):
     geom.append(l.split(" ")[3])
     l = f.readline()
 
+def float_eq(a, b, delta=1E-8):
+  if np.abs(a-b) < delta: return True
+  else: return False
 
 ########################################
 # Geometry read and write
@@ -136,6 +139,31 @@ def search_replace_file(filepath, search, replace):
   p.wait()
   return 0
 
+
+# REPLACE THIS WITH A BINARY FILE IN TC!! PARSING THE OUTPUT FILE A BUNCH OF TIMES IS A WASTE OF RESOURCES
+# get fomo orbital energies and occupations
+def scan_fomo(filed):
+  output = []
+  f = open(filed, 'r')
+  l = f.readline()
+  while l != "":
+    #print(l.split())
+    if l.split() != ["Orbital","Energy","Occupation"]:
+      l = f.readline()
+    else: break
+  # l currently is header
+  l = f.readline()
+  l = f.readline()
+  while len(l.split()) == 3:
+    temp = l.split()
+    #print((l, temp))
+    temp[0] = int(temp[0])
+    temp[1] = float(temp[1])
+    temp[2] = float(temp[2])
+    output.append(temp)
+    l = f.readline()
+  return output
+
 # ensure every subdirectory of a path exists
 def makedirs(dirstr):
   for i in range(2, dirstr.count("/")+1):
@@ -210,7 +238,7 @@ class molden:
     
 
 class job:
-  def __init__(self, n, Natoms, Nkrylov, ReCn, ImCn, xyz, pjob, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, logger=None, SCHEDULER=False, halfstep=False, noclean=False):
+  def __init__(self, n, Natoms, Nkrylov, ReCn, ImCn, xyz, pjob, JOBDIR, JOB_TEMPLATE, TDCI_TEMPLATE, FIELD_INFO, CONFIG, logger=None, SCHEDULER=False, halfstep=False, noclean=False):
     self.n = n
     self.Natoms = Natoms
     self.Nkrylov = Nkrylov
@@ -218,6 +246,7 @@ class job:
     self.ImCn = ImCn
     self.xyz = xyz
     self.pjob = pjob
+    self.config = CONFIG
     if halfstep:
       if FIELD_INFO["half"] == 0: # This is the first half of the timestep
 	self.dir = JOBDIR+"electronic/"+str(n)+"h0/"
@@ -353,13 +382,27 @@ class job:
   # Detection works by checking if any FOMO orbitals are degenerate, and if the deviation of rmsgrad between N-1 and N is 50% more than deviation of rmsgrad between N-2 and N-1, then we detect a problem. 
   def check_FOMO_grad_error(self, grad):
     logprint = self.logger.logprint
+    fomodata = scan_fomo( self.dir+"test"+str(self.n)+".out")
+    has_degenerates = False
+    # fomodata contains 2 closed and 2 virtual orbitals in addition to the active orbitals
+    for i in range(2, len(fomodata)-3): # e is ( index, energy, occupation )
+      if float_eq( fomodata[i][2], fomodata[i+1][2], 0.025 ):
+        logprint("degen: "+str(i)+", "+str(i+1))
+        has_degenerates = True
+
+    if has_degenerates:
+      logprint("Step has degenerate FOMO orbitals, checking for rmsgrad problem...")
+      logprint(str(fomodata))
+    else:
+      return False
+
     grad.resize((3*self.Natoms))
     rms_grad = rms( grad )
     grad.resize((self.Natoms,3))
 
     # We need the previous gradients...
-    if self.prevjob is not None: # Cant check if there's no previous job
-      prevfilesgood = self.prevjob.files_good(self)
+    if self.pjob is not None: # Cant check if there's no previous job
+      prevfilesgood = self.pjob.files_good()
       if not prevfilesgood: 
         logprint("In check_FOMO_grad_error: prevjob files bad")
         return False
@@ -367,8 +410,8 @@ class job:
       logprint("In check_FOMO_grad_error: prevjob is None")
       return False
 
-    if self.prevjob.prevjob is not None: # Cant check if there's no previous job
-      prev2filesgood = self.prevjob.prevjob.files_good(self)
+    if self.pjob.pjob is not None: # Cant check if there's no previous job
+      prev2filesgood = self.pjob.pjob.files_good()
       if not prev2filesgood:
 	logprint("In check_FOMO_grad_error: prev2job files bad")
         return False
@@ -376,24 +419,27 @@ class job:
       logprint("In check_FOMO_grad_error: prev2job is None")
       return False
 
-    prevgrad = read_bin_array(self.prevjob.dir+"gradinit.bin", 3*self.Natoms)
+    prevgrad = read_bin_array(self.pjob.dir+"gradinit.bin", 3*self.Natoms)
     rms_prevgrad = rms( prevgrad )
-    prev2grad = read_bin_array(self.prevjob.prevjob.dir+"gradinit.bin", 3*self.Natoms)
-    rms_prev2grad = rms( prevgrad )
+    prev2grad = read_bin_array(self.pjob.pjob.dir+"gradinit.bin", 3*self.Natoms)
+    rms_prev2grad = rms( prev2grad )
 
     prev_dev = np.abs(rms_prev2grad - rms_prevgrad)
     dev = np.abs(rms_grad - rms_prevgrad)
-    if dev > 1.5*prev_dev:
-      logprint("Deviation increased by: "+str(100* (prev_dev/dev))+"%  ( "+dev+" , "+prev_dev+" )")
+    m, b = 1.6, 1E-8
+    if dev > (m*prev_dev + b):
+      logprint("Deviation increased by: "+str(100* (abs(dev-prev_dev)/dev))+"%  ( "+str(dev)+" , "+str(prev_dev)+" , "+str(m*prev_dev + b)+" )")
       return True
     else:
+      logprint("Deviation increased by: "+str(100* (abs(dev-prev_dev)/dev))+"%  ( "+str(dev)+" , "+str(prev_dev)+" , "+str(m*prev_dev + b)+" )")
       return False
 
 
   # Make sure all the files we expect were written by TeraChem
   def files_good(self):
+    logprint = self.logger.logprint
     filesgood = True
-    files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin", "tdci.molden"]
+    files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin"]
     if (self.n > 0) and (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
       files += ["S_MIXED_MO_active.bin"]
     if self.FIELD_INFO["krylov_end"]:
@@ -402,9 +448,7 @@ class job:
       if not os.path.exists(self.dir+fn):
         filesgood = False
         logprint("ERROR: "+self.dir+fn+" missing")
-    if not filesgood:
-      return False
-    
+    return filesgood
 
   def run_safely(self):
     logprint = self.logger.logprint
@@ -608,8 +652,9 @@ class job:
     imcn = read_bin_array(self.dir+"ImCn_end.bin", self.ndets)
     error = None
     # Check for FOMO Gradient error
-    if self.check_FOMO_grad_error(grad): 
-      error = "FOMO GRADIENT ERROR"
+    if ((not self.halfstep) and (self.config.FIX_FOMO)):
+      if self.check_FOMO_grad_error(grad): 
+	error = "FOMO GRADIENT ERROR"
 
     if self.FIELD_INFO["krylov_end"]:
       # just calculate these
@@ -745,7 +790,7 @@ class tccontroller:
     xyz = np.zeros((self.Natoms,3)) # need one to make a job instance, should be fine since we're not running it.
     j = job( self.N-1, self.Natoms, self.Nkrylov, None, None, xyz, 
 	     None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, 
-	     logger=self.logger, SCHEDULER=self.SCHEDULER, noclean=True )
+	     self.config, logger=self.logger, SCHEDULER=self.SCHEDULER, noclean=True )
     self.prevjob = j
     
     
@@ -762,7 +807,7 @@ class tccontroller:
         xyz = np.zeros((self.Natoms,3)) # need one to make a job instance, should be fine since we're not running it.
         j = job( int(joblist[i]), self.Natoms, self.Nkrylov, None, None, xyz, 
                  None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, 
-                 logger=self.logger, SCHEDULER=self.SCHEDULER )
+                 self.config, logger=self.logger, SCHEDULER=self.SCHEDULER )
         tcdata = j.output() # Check if the job completed and has good output
         print(tcdata)
         if tcdata:
@@ -792,7 +837,7 @@ class tccontroller:
     grad_template["tdci_simulation_time"] = "0.01"
     grad_template["tdci_nstep"] = "1"
     grad_template["tdci_krylov_end"] = "no"
-    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
+    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.gradjob = True
     j.dir = self.JOBDIR+"electronic/grad/"
     self.prevjob = j
@@ -802,14 +847,14 @@ class tccontroller:
     hess_template = copy.deepcopy(self.TDCI_TEMPLATE)
     hess_template["run"] = "frequencies"
     hess_template["to"] = str(temp)
-    j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
+    j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.dir = self.JOBDIR+"electronic/hessian"+str(self.N)+"/"
     return j.run_safely()
     
 
   def nextstep(self, xyz, ReCn=None, ImCn=None):
     print("creating job step: "+str(self.N))
-    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.prevjob, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER)
+    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.prevjob, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER)
     output = j.run_safely()
     self.N+=1
     self.prevjob = j
@@ -820,7 +865,7 @@ class tccontroller:
     halfstep_template = copy.deepcopy(self.TDCI_TEMPLATE)
     halfstep_template["tdci_simulation_time"] = str(float(halfstep_template["tdci_simulation_time"])/2.)
     halfstep_template["tdci_nstep"] = str( int( int(halfstep_template["tdci_nstep"])/2))
-    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.prevjob, self.JOBDIR, self.JOB_TEMPLATE, halfstep_template, self.FIELD_INFO, logger=self.logger, SCHEDULER=self.SCHEDULER, halfstep=True)
+    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.prevjob, self.JOBDIR, self.JOB_TEMPLATE, halfstep_template, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER, halfstep=True)
     output = j.run_safely()
     if self.FIELD_INFO["half"]:
       self.N+=0
