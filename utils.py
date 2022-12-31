@@ -85,6 +85,111 @@ def getmasses(atoms):
 
 
 
+# Wigner distribution
+
+def initial_wigner(self, iseed, masses, temp=0.0):
+  """Wigner distribution of positions and momenta
+  Works at finite temperature if a temp parameter is passed
+  If temp is not provided temp = 0 is assumed"""
+
+  print "## randomly selecting Wigner initial conditions at T=", temp
+  #ndims = self.get_numdims()
+  ndims = len(masses)
+  h5f = h5py.File('hessian.hdf5', 'r')
+  pos = h5f['geometry'][:].flatten()
+  h = h5f['hessian'][:]
+  #m = self.get_masses()
+  m = masses
+  sqrtm = np.sqrt(m)
+
+  # build mass weighted hessian
+  h_mw = np.zeros_like(h)
+
+  for idim in range(ndims):
+    h_mw[idim, :] = h[idim, :] / sqrtm
+
+  for idim in range(ndims):
+    h_mw[:, idim] = h_mw[:, idim] / sqrtm
+
+  # symmetrize mass weighted hessian
+  h_mw = 0.5 * (h_mw + h_mw.T)
+
+  # diagonalize mass weighted hessian
+  evals, modes = np.linalg.eig(h_mw)
+
+  # sort eigenvectors
+  idx = evals.argsort()[::-1]
+  evals = evals[idx]
+  modes = modes[:, idx]
+
+  print '# eigenvalues of the mass-weighted hessian are (a.u.)'
+  print evals
+
+  # Checking if frequencies make sense
+  freq_cm = np.sqrt(evals[0:ndims - 6])*219474.63
+  n_high_freq = 0
+  print 'Frequencies in cm-1:'
+  for freq in freq_cm:
+    if freq > 5000: n_high_freq += 1
+    print freq
+    assert not np.isnan(freq), "NaN encountered in frequencies! Exiting"
+
+  if n_high_freq > 0: print("Number of frequencies > 5000cm-1:", n_high_freq)
+
+  # seed random number generator
+  np.random.seed(iseed)
+  alphax = np.sqrt(evals[0:ndims - 6]) / 2.0
+
+  # finite temperature distribution
+  if temp > 1e-05:
+    beta = 1 / (temp * 0.000003166790852)
+    print "beta = ", beta
+    alphax = alphax * np.tanh(np.sqrt(evals[0:ndims - 6]) * beta / 2)
+  sigx = np.sqrt(1.0 / (4.0 * alphax))
+  sigp = np.sqrt(alphax)
+
+  dtheta = 2.0 * np.pi * np.random.rand(ndims - 6)
+  dr = np.sqrt(np.random.rand(ndims - 6))
+
+  dx1 = dr * np.sin(dtheta)
+  dx2 = dr * np.cos(dtheta)
+
+  rsq = dx1 * dx1 + dx2 * dx2
+
+  fac = np.sqrt(-2.0 * np.log(rsq) / rsq)
+
+  x1 = dx1 * fac
+  x2 = dx2 * fac
+
+  posvec = np.append(sigx * x1, np.zeros(6))
+  momvec = np.append(sigp * x2, np.zeros(6))
+
+  deltaq = np.matmul(modes, posvec) / sqrtm
+  pos += deltaq
+  mom = np.matmul(modes, momvec) * sqrtm
+
+  #self.set_positions(pos)
+  #self.set_momenta(mom)
+
+  zpe = np.sum(alphax[0:ndims - 6])
+  ke = 0.5 * np.sum(mom * mom / m)
+  #         print np.sqrt(np.tanh(evals[0:ndims-6]/(2*0.0031668)))
+  print("FROM WIGNER FUNCTION:")
+  print "# ZPE = ", zpe
+  print "# kinetic energy = ", ke
+  print("END WIGNER")
+
+  v = np.zeros_like(mom)
+  print(mom)
+  print(m)
+  for i in range(0,len(mom)):
+    v[i] = mom[i]/m[i]
+
+  print(v)
+  return pos, v
+
+
+
 ########################################
 # h5py
 ########################################
@@ -316,6 +421,7 @@ class ConfigHandler:
     self.SCHEDULER = config.SCHEDULER
     self.TERACHEM = config.TERACHEM
     self.TIMESTEP_AU = config.TIMESTEP_AU # Dynamics time step in atomic units
+    self.MAXITERS = config.MAXITERS
     self.nstep = config.NSTEPS_TDCI
     self.nfields = config.nfields
     self.krylov_end = config.krylov_end

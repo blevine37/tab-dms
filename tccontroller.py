@@ -15,6 +15,8 @@ E_FIELD_AU = 5.142206707E+11
 np.set_printoptions(precision=4)
 np.set_printoptions(linewidth=np.inf)
 
+rms = lambda x_seq: (sum(x*x for x in x_seq)/len(x_seq))**(0.5)
+
 # TCPB uses what i'm calling "tcstring" here
 # TODO: add TCPB support :)
 def tcstring_to_xyz(atoms,geom,filename):
@@ -217,7 +219,10 @@ class job:
     self.xyz = xyz
     self.pjob = pjob
     if halfstep:
-      self.dir = JOBDIR+"electronic/"+str(n)+"h/"
+      if FIELD_INFO["half"] == 0: # This is the first half of the timestep
+	self.dir = JOBDIR+"electronic/"+str(n)+"h0/"
+      if FIELD_INFO["half"] == 1: # This is the second half of the timestep
+	self.dir = JOBDIR+"electronic/"+str(n)+"h1/"
     else:
       self.dir = JOBDIR+"electronic/"+str(n)+"/"
     self.halfstep = halfstep
@@ -343,6 +348,63 @@ class job:
     else:
       return False
 
+  # In CAS(2,2) tests when the FOMO orbitals are degenerate, sometimes the rms gradient unphysically spikes.
+  # Returns true if we detect the problem
+  # Detection works by checking if any FOMO orbitals are degenerate, and if the deviation of rmsgrad between N-1 and N is 50% more than deviation of rmsgrad between N-2 and N-1, then we detect a problem. 
+  def check_FOMO_grad_error(self, grad):
+    logprint = self.logger.logprint
+    grad.resize((3*self.Natoms))
+    rms_grad = rms( grad )
+    grad.resize((self.Natoms,3))
+
+    # We need the previous gradients...
+    if self.prevjob is not None: # Cant check if there's no previous job
+      prevfilesgood = self.prevjob.files_good(self)
+      if not prevfilesgood: 
+        logprint("In check_FOMO_grad_error: prevjob files bad")
+        return False
+    else:
+      logprint("In check_FOMO_grad_error: prevjob is None")
+      return False
+
+    if self.prevjob.prevjob is not None: # Cant check if there's no previous job
+      prev2filesgood = self.prevjob.prevjob.files_good(self)
+      if not prev2filesgood:
+	logprint("In check_FOMO_grad_error: prev2job files bad")
+        return False
+    else:
+      logprint("In check_FOMO_grad_error: prev2job is None")
+      return False
+
+    prevgrad = read_bin_array(self.prevjob.dir+"gradinit.bin", 3*self.Natoms)
+    rms_prevgrad = rms( prevgrad )
+    prev2grad = read_bin_array(self.prevjob.prevjob.dir+"gradinit.bin", 3*self.Natoms)
+    rms_prev2grad = rms( prevgrad )
+
+    prev_dev = np.abs(rms_prev2grad - rms_prevgrad)
+    dev = np.abs(rms_grad - rms_prevgrad)
+    if dev > 1.5*prev_dev:
+      logprint("Deviation increased by: "+str(100* (prev_dev/dev))+"%  ( "+dev+" , "+prev_dev+" )")
+      return True
+    else:
+      return False
+
+
+  # Make sure all the files we expect were written by TeraChem
+  def files_good(self):
+    filesgood = True
+    files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin", "tdci.molden"]
+    if (self.n > 0) and (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
+      files += ["S_MIXED_MO_active.bin"]
+    if self.FIELD_INFO["krylov_end"]:
+      files += ["ReCn_krylov_end.bin", "ImCn_krylov_end.bin", "Cn_krylov_end.bin", "E_krylov_end.bin", "tdcigrad_krylov.bin"]
+    for fn in files:
+      if not os.path.exists(self.dir+fn):
+        filesgood = False
+        logprint("ERROR: "+self.dir+fn+" missing")
+    if not filesgood:
+      return False
+    
 
   def run_safely(self):
     logprint = self.logger.logprint
@@ -482,7 +544,8 @@ class job:
              "states_eng" : states_eng,
              "recn" : self.ReCn,
              "imcn" : self.ImCn,
-             "tdci_dir": self.dir
+             "tdci_dir": self.dir,
+             "error": None
            }
 
 
@@ -510,24 +573,17 @@ class job:
   def output(self):
     logprint = self.logger.logprint
     clsd, acti = int(self.TDCI_TEMPLATE["closed"]), int(self.TDCI_TEMPLATE["active"])
-    filesgood = True
-    files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin", "tdci.molden"]
-    if (self.n > 0) and (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
-      files += ["S_MIXED_MO_active.bin"]
-    if self.FIELD_INFO["krylov_end"]:
-      files += ["ReCn_krylov_end.bin", "ImCn_krylov_end.bin", "Cn_krylov_end.bin", "E_krylov_end.bin", "tdcigrad_krylov.bin"]
-    for fn in files:
-      if not os.path.exists(self.dir+fn):
-        filesgood = False
-        logprint("ERROR: "+fn+" missing")
-    if not filesgood:
+
+    if not self.files_good():
+      logprint("output(): Files bad, aborting output")
       return False
 
     if (self.ndets == 0):
       self.readmisc()
     # rewrites the molden file with just the active orbitals
-    moldenwriter = molden(self.dir+"tdci.molden", clsd, acti)
-    del moldenwriter 
+    #   Diabatization rotates the CI vector instead of orbitals now, so there's no reason to do this anymore.
+    #moldenwriter = molden(self.dir+"tdci.molden", clsd, acti)
+    #del moldenwriter 
     
     # Format output structure
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
@@ -550,6 +606,11 @@ class job:
     imcn_krylov = None
     recn = read_bin_array(self.dir+"ReCn_end.bin", self.ndets)
     imcn = read_bin_array(self.dir+"ImCn_end.bin", self.ndets)
+    error = None
+    # Check for FOMO Gradient error
+    if self.check_FOMO_grad_error(grad): 
+      error = "FOMO GRADIENT ERROR"
+
     if self.FIELD_INFO["krylov_end"]:
       # just calculate these
       #recn_krylov = read_bin_array(self.dir+"ReCn_krylov_end.bin", self.Nkrylov)
@@ -573,7 +634,8 @@ class job:
                "krylov_states": krylov_states,  # 2d array of CI vectors of each approx eigenstate
                "krylov_energies": krylov_energies, # 1d array of energies of each approx eigenstate
                "krylov_gradients": krylov_gradients, # 3d array of approx eigenstate gradients, Napprox x Natoms x 3 dim.
-               "tdci_dir": self.dir
+               "tdci_dir": self.dir,
+               "error": error
              }
 
     #print("TDCI job Output:\n")

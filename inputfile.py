@@ -12,7 +12,13 @@ SCHEDULER = False
 TERACHEM = "/home/adurden/terachem/build/bin/" # directory containing terachem executable
 
 
-TIMESTEP_AU = 4.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attosecond
+TIMESTEP_AU = 4.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attoseconds
+# Terminate after MAXITERS nuclear timesteps
+MAXITERS = 1000000 / (24.0*TIMESTEP_AU) # 1000 fs
+
+duration = iters * timestep
+iters = duration/timestep
+
 
 ########################################
 # TDCI TeraChem Template

@@ -136,18 +136,37 @@ class Ehrenfest:
   # ImCn_init : Imaginary CI Vector at time t+(dt/2)
   # 
   def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
+    it = 0
     t = t_init
     x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
     a = 0.0 # initial acceleration is not used
     TCdata = None
-    for it in range(0,99999999): # go forever! :D
+    while it < self.tc.config.maxiters: # go forever! :D
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
-      #xprev = np.copy(x)
+      x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
       x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
-      ReCn, ImCn = None, None # Defaults to =TCdata["recn"],TCdata["imcn"] from prevstep.
-      #self.savestate(xprev, v_timestep, v, a, t, TCdata)
-      self.savestate(x, v_timestep, v, a, t, TCdata)
+      ReCn, ImCn = TCdata["recn"], TCdata["imcn"]
+      # Check for errors that need to modify propagation 
+      if (self.config.FIX_FOMO and (TCdata["error"] == "FOMO GRADIENT ERROR")):
+        self.logprint("=====ERROR!!!!======")
+        self.logprint("FOMO GRADIENT ISSUE DETECTED")
+        self.logprint("Skipping this geometry by doing two half-length TDCIs")
+        # We can't get gradients at x. Replace this step with two half-steps
+        self.tc.N+=-1
+        #   First half-step use x_(it-1)
+        v_, a_, TCdata_ = self.halfstep(x_prev, v_prev, ReCn_prev, ImCn_prev)
+        # Propagate x_(it) to x_(it+1) using the grad from x_(it-1) at time t
+        x_next = x + v_*self.delta
+        self.savestate(x, v_, a_, t, TCdata_)
+        self.logprint("First half-step complete")
+        # Now catch the electronic structure up to t+dt
+        v_2, a_2, TCdata_2 = self.halfstep(x_next, v_, TCdata_["recn"], TCdata_["imcn"])
+        x, v, ReCn, ImCn = x, v_, TCdata_2["recn"], TCdata_2["imcn"]
+        self.logprint("Second half-step complete")
+      else:
+	self.savestate(x, v_timestep, v, a, t, TCdata)
       self.logprint("Iteration " + str(it).zfill(4) + " finished")
+      it+=1
       
     
   # Accepts current state, runs TDCI, calculates next state.
