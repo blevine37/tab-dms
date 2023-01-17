@@ -55,6 +55,10 @@ with open( srcpath+"/.git/refs/heads/main", 'r') as f:
   commit = (f.read()).strip()[:8]
 
 logprint("Rev: "+str(commit))
+
+if config.WIGNER_PERTURB:
+  logprint("Wigner Random Seed: "+str(config.WIGNER_SEED))
+
 logprint("=================")
 
 # Time steps
