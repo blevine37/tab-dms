@@ -118,8 +118,17 @@ class Ehrenfest:
       t = 0.0
       recn = gradout["states"][self.tc.config.initial_electronic_state]
       imcn = np.zeros(len(recn))
-      x = x / bohrtoangs # Initial geometry in Bohr
+      x = x / bohrtoangs # cast Initial geometry to Bohr
       v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
+
+      if self.tc.config.WIGNER_PERTURB: # Perturb according to wigner distribution
+        TCdata = self.tc.hessian(x*bohrtoangs, self.tc.config.WIGNER_TEMP )
+        x, v_timestep = utils.initial_wigner( self.tc.config.WIGNER_SEED,
+                                              x*bohrtoangs, TCdata["hessian"], self.masses,
+                                              self.tc.config.WIGNER_TEMP ) 
+	x = x / bohrtoangs
+	v_timestep = v_timestep / bohrtoangs
+
       a = np.zeros([len(self.atoms), 3]) # Accel at t=0
       v, a, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep!! \(^0^)/
       self.savestate(x, v_timestep, v, a, t, TCdata, atoms=self.atoms) # Save initial state?
@@ -136,6 +145,7 @@ class Ehrenfest:
   # ImCn_init : Imaginary CI Vector at time t+(dt/2)
   # 
   def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
+    realtime_start = time.time()  # For benchmarking
     it = 0
     t = t_init
     x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
@@ -167,6 +177,12 @@ class Ehrenfest:
 	self.savestate(x, v_timestep, v, a, t, TCdata)
       self.logprint("Iteration " + str(it).zfill(4) + " finished")
       it+=1
+    self.logprint("Completed Ehrenfest Propagation!")
+    time_simulated = (t-t_init)/1000.
+    import datetime
+    realtime = str( datetime.timedelta( seconds=(time.time() - realtime_start) )) 
+    self.logprint("Simulated "+str(time_simulated)+" fs with "+str(it)+" steps in "+realtime+" Real time.")
+
       
     
   # Accepts current state, runs TDCI, calculates next state.

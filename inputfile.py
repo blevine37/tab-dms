@@ -16,9 +16,11 @@ TIMESTEP_AU = 4.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attoseco
 # Terminate after MAXITERS nuclear timesteps
 MAXITERS = 1000000 / (24.0*TIMESTEP_AU) # 1000 fs
 
-duration = iters * timestep
-iters = duration/timestep
+FIX_FOMO = False   # This is still not working. Intended to solve a FOMO-gradient bug in CAS(2,2)
 
+WIGNER_PERTURB = True   # Perturb the initial position and velocity based on Wigner distribution
+WIGNER_TEMP = 0.0       # Temperature for Wigner distribution
+WIGNER_SEED = 87062     # Random seed for Wigner distribution sampling
 
 ########################################
 # TDCI TeraChem Template

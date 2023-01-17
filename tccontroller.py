@@ -847,6 +847,7 @@ class tccontroller:
     hess_template = copy.deepcopy(self.TDCI_TEMPLATE)
     hess_template["run"] = "frequencies"
     hess_template["to"] = str(temp)
+    hess_template["mincheck"] = "false" # Really cool that every other tc param uses yes/no but this one uses false
     j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.dir = self.JOBDIR+"electronic/hessian"+str(self.N)+"/"
     return j.run_safely()

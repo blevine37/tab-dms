@@ -48,6 +48,13 @@ ehrenfest_ = ehrenfest.Ehrenfest(config.TIMESTEP_AU, logprint, tc)
 ########################################
 # Print header
 logprint("TDCI + TAB-DMS")
+#   get commit number
+srcpath = os.path.dirname(os.path.realpath(__file__))
+commit = ""
+with open( srcpath+"/.git/refs/heads/main", 'r') as f:
+  commit = (f.read()).strip()[:8]
+
+logprint("Rev: "+str(commit))
 logprint("=================")
 
 # Time steps

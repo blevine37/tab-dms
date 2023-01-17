@@ -87,19 +87,24 @@ def getmasses(atoms):
 
 # Wigner distribution
 
-def initial_wigner(self, iseed, masses, temp=0.0):
+def initial_wigner(iseed, x, hessian, masses, temp=0.0):
   """Wigner distribution of positions and momenta
   Works at finite temperature if a temp parameter is passed
   If temp is not provided temp = 0 is assumed"""
 
   print "## randomly selecting Wigner initial conditions at T=", temp
   #ndims = self.get_numdims()
-  ndims = len(masses)
-  h5f = h5py.File('hessian.hdf5', 'r')
-  pos = h5f['geometry'][:].flatten()
-  h = h5f['hessian'][:]
+  ndims = 3*len(masses)
+  #h5f = h5py.File('hessian.hdf5', 'r')
+  #pos = h5f['geometry'][:].flatten()
+  #h = h5f['hessian'][:]
+  pos = np.copy(x)
+  pos.resize((ndims))
+  h = np.copy(hessian)
   #m = self.get_masses()
-  m = masses
+  m = np.zeros((ndims))
+  for i in range(0,ndims): # our masses has len natoms, this code needs len 3*natoms
+    m[i] = float(masses[i/3])
   sqrtm = np.sqrt(m)
 
   # build mass weighted hessian
@@ -185,6 +190,12 @@ def initial_wigner(self, iseed, masses, temp=0.0):
   for i in range(0,len(mom)):
     v[i] = mom[i]/m[i]
 
+  pos.resize((len(masses), 3))
+  v.resize((len(masses), 3))
+
+  print("newpos:")
+  print(pos)
+  print("newv:")
   print(v)
   return pos, v
 
@@ -437,6 +448,15 @@ class ConfigHandler:
 
     self.MAXITERS = 999999999999999
     try: self.MAXITERS = config.MAXITERS
+    except: pass
+
+    self.WIGNER_PERTURB = False
+    self.WIGNER_TEMP = 0.0
+    self.WIGNER_SEED = 0
+    try:
+      self.WIGNER_PERTURB = config.WIGNER_PERTURB
+      self.WIGNER_TEMP = config.WIGNER_TEMP
+      self.WIGNER_SEED = config.WIGNER_SEED
     except: pass
 
     self.atoms, self.xyz = xyz_read(config.xyzpath)
