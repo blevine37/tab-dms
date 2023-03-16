@@ -84,7 +84,7 @@ def dictkey(key):
              "tdci_floquet", "tdci_floquet_photons", "tdci_krylov_end", "tdci_krylov_end_n",
              "tdci_krylov_end_interval", "tdci_diabatize_orbs", "tdci_recn_readfile",
              "tdci_imcn_readfile", "tdci_prevorbs_readfile", "tdci_prevcoords_readfile",
-             "tdci_gradient", "tdci_grad_init", "tdci_grad_half", "tdci_fieldfile0",
+             "tdci_grad_init", "tdci_grad_half", "tdci_grad_end", "tdci_fieldfile0",
              "tdci_fieldfile1", "tdci_fieldfile2", "tdci_fieldfile3", "tdci_fieldfile4",
              "casci", "fon", "fon_method", "fon_temperature", "ci_solver", "dcimaxiter",
              "dciprintinfo", "dcipreconditioner", "closed", "active", "cassinglets",
@@ -352,10 +352,14 @@ class job:
     if ((norm<0.7) or (norm>1.1) or (np.isnan(norm))):
       logprint("ERROR: Norm out of bounds")
       outputgood = False
-    logprint("Sum of gradient elements: "+str(np.sum(output["grad"])))
-    if (np.isnan(np.sum(output["grad"]))):
-      logprint("ERROR: nan in gradient")
-      outputgood = False
+    if "grad_half" in output.keys():
+      if (np.isnan(np.sum(output["grad_half"]))):
+	logprint("ERROR: nan in gradient")
+	outputgood = False
+    if "grad_end" in output.keys():
+      if (np.isnan(np.sum(output["grad_end"]))):
+	logprint("ERROR: nan in gradient")
+	outputgood = False
     if self.FIELD_INFO["krylov_end"]:
       norm = np.sum(output["recn_krylov"]**2) + np.sum(output["imcn_krylov"]**2)
       logprint("Final wfn norm (AES basis): "+str(norm))
@@ -439,7 +443,12 @@ class job:
   def files_good(self):
     logprint = self.logger.logprint
     filesgood = True
-    files = ["ReCn_end.bin","ImCn_end.bin", "tdcigrad.bin", "tdcigrad_half.bin", "misc.bin"]
+    files = ["ReCn_end.bin","ImCn_end.bin", "misc.bin"]
+    if (self.halfstep):
+      if self.FIELD_INFO["half"] == 0:
+        files += ["tdcigrad.bin"] # First halfstep needs grad_end
+    else: files += ["tdcigrad_half.bin"] # Fullstep calculations need grad_half
+
     if (self.n > 0) and (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
       files += ["S_MIXED_MO_active.bin"]
     if self.FIELD_INFO["krylov_end"]:
@@ -634,15 +643,20 @@ class job:
 
     if os.path.exists(self.dir+"gradinit.bin"):
       grad_init = read_bin_array(self.dir+"gradinit.bin", 3*self.Natoms)
+      logprint("rms(grad_t=start_frame) : "+str(rms(grad_init)))
       grad_init.resize((self.Natoms, 3))
-      logprint("Grad_init:\n"+str(grad_init))
 
-    grad = read_bin_array(self.dir+"tdcigrad.bin", 3*self.Natoms)
-    grad.resize((self.Natoms, 3))
-    grad_half = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
-    #grad_half = read_bin_array(self.dir+"grad_S0.bin", 3*self.Natoms)
-    grad_half.resize((self.Natoms, 3))
-    logprint("Grad_half:\n"+str(grad_half))
+    grad_end = None
+    grad_half = None
+    if (self.halfstep):
+      if self.FIELD_INFO["half"] == 0:
+	grad_end = read_bin_array(self.dir+"tdcigrad.bin", 3*self.Natoms)
+	grad_end.resize((self.Natoms, 3))
+    else: # Full timestep, only grad_half
+      grad_half = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
+      logprint("rms(grad_t=half) : "+str(rms(grad_half)))
+      grad_half.resize((self.Natoms, 3))
+
     krylov_states = None
     krylov_energies = None
     krylov_gradients = None
@@ -672,8 +686,8 @@ class job:
     output = { "recn": recn,  # 1d array, number of determinants
                "imcn": imcn,  # 1d array, number of determinants
                "eng": eng,    # float, Energy of current wfn
-               "grad": grad,    # 2d array, Natoms x 3 dimensions.
-               "grad_half": grad_half,    # 2d array, Natoms x 3 dimensions.
+               #"grad": grad,    # 2d array, Natoms x 3 dimensions.   # We dont actually need grad at the end, right?
+               #"grad_half": grad_half,    # 2d array, Natoms x 3 dimensions.
                "recn_krylov": recn_krylov,      # 1d array, 2*krylov_sub_n
                "imcn_krylov": imcn_krylov,      # 1d array, 2*krylov_sub_n
                "krylov_states": krylov_states,  # 2d array of CI vectors of each approx eigenstate
@@ -682,6 +696,11 @@ class job:
                "tdci_dir": self.dir,
                "error": error
              }
+    if (self.halfstep):
+      if self.FIELD_INFO["half"] == 0:
+        output["grad_end"] = grad_end
+    else: # Full timestep, only grad_half
+      output["grad_half"] = grad_half
 
     #print("TDCI job Output:\n")
     #print(output)
@@ -833,6 +852,7 @@ class tccontroller:
     #grad_template["casgradstate"] = "0 1 2"
     grad_template["tdci_grad_init"] = "yes"
     grad_template["tdci_grad_half"] = "no"
+    grad_template["tdci_grad_end"] = "no"
     grad_template["tdci_fstrength"] = "0.0"
     grad_template["tdci_simulation_time"] = "0.01"
     grad_template["tdci_nstep"] = "1"
@@ -866,6 +886,11 @@ class tccontroller:
     halfstep_template = copy.deepcopy(self.TDCI_TEMPLATE)
     halfstep_template["tdci_simulation_time"] = str(float(halfstep_template["tdci_simulation_time"])/2.)
     halfstep_template["tdci_nstep"] = str( int( int(halfstep_template["tdci_nstep"])/2))
+    halfstep_template["tdci_grad_half"] = "no"
+    if self.FIELD_INFO["half"] == 0: # First half of frame, we want gradient at end of tdci (halfway through frame)
+      halfstep_template["tdci_grad_end"] = "yes"
+    else: # Second half of the frame. No need for gradient.
+      halfstep_template["tdci_grad_end"] = "no"
     j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, self.prevjob, self.JOBDIR, self.JOB_TEMPLATE, halfstep_template, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER, halfstep=True)
     output = j.run_safely()
     if self.FIELD_INFO["half"]:

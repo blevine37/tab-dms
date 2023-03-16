@@ -93,11 +93,12 @@ class Ehrenfest:
 
   def loadstate(self):
     config = self.tc.config
-    N = int(config.restart_frame)
+    N = int(config.restart_frame) # Restart at frame N
+    # Create a new hdf5 file with steps 0,...,N-1, and then restart calculation with frame N.
     x_, v_half_, a_, t_, recn_, imcn_, self.atoms = utils.h5py_copy_partial(config.restart_hdf5, config.restart_frame, config)
-    time.sleep(2)
+    time.sleep(2) # Wait a sec to make sure IO operations are done.
     self.tc.N = config.restart_frame
-    self.tc.restart_setup()
+    self.tc.restart_setup() # Prepare tccontroller for running from a restart
     print(( x_, v_half_, a_, t_, recn_, imcn_))
     return x_, v_half_, a_, t_, recn_, imcn_
     
@@ -212,7 +213,7 @@ class Ehrenfest:
   #  TCdata : Return dictionary from tccontroller TDCI job from t to t+(dt/2)
   def halfstep(self, x, v, ReCn=None, ImCn=None):
     TCdata = self.tc.halfstep(x*bohrtoangs, ReCn=ReCn, ImCn=ImCn) # Do TDCI! \(^0^)/
-    a = self.getAccel(TCdata["grad"], TCdata["recn"], TCdata["imcn"])
+    a = self.getAccel(TCdata["grad_end"], TCdata["recn"], TCdata["imcn"])
     print((v, a, self.delta))
     v_next = v + a*self.delta/2.
     return v_next, a, TCdata

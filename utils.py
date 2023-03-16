@@ -471,8 +471,8 @@ class ConfigHandler:
     TDCI_TEMPLATE["tdci_simulation_time"] = str(self.tdci_simulation_time)
     TDCI_TEMPLATE["tdci_nstep"] = str(self.nstep)
     TDCI_TEMPLATE["tdci_nfields"] = str(self.nfields)
-    TDCI_TEMPLATE["tdci_gradient"] = "yes" # TODO: only do grad at halfstep to save time
-    TDCI_TEMPLATE["tdci_grad_init"] = "yes"
+    TDCI_TEMPLATE["tdci_grad_end"] = "no" # TODO: only do grad at halfstep to save time
+    TDCI_TEMPLATE["tdci_grad_init"] = "no"
     TDCI_TEMPLATE["tdci_grad_half"] = "yes"
     TDCI_TEMPLATE["tdci_fieldfile0"] = "field0.bin"
     # Krylov subspace options
