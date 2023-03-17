@@ -30,6 +30,7 @@ def clean_files(jobdir):
 # Geometry read and write
 ########################################
 
+# XYZ files always expected to use Angstroms
 def xyz_write(atoms, coords, filename):
   f = open(filename,'w')
   f.write(str(len(atoms))+'\n\n')

@@ -195,7 +195,7 @@ rms = lambda x_seq: (sum(x*x for x in x_seq)/len(x_seq))**(1/2)
 
 
 
-# This array makes a bunch of arrays you can plot.
+# This class makes a bunch of arrays you can plot.
 #   Arrays:
 #     self.time    - Time at the start of each frame in femtoseconds
 #     self.pe      - Potential Energy in eV as calculated in TeraChem
@@ -251,7 +251,7 @@ class plottables:
     tdci_grad_states = scan_outfile(dt+"test1.in", ["tdci_grad_states"], 1)
     if tdci_grad_states == "yes":
       self.DoGradStates = True
-    runtime = "init_params runtime: {:10.6f} seconds\n".format(time.time() - start)
+    runtime = "init_params runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
 
   def get_state_grads(self):
@@ -269,11 +269,10 @@ class plottables:
         else:
           grad_tdci = read_bin_array(dt+"gradstate"+str(state)+".bin",3*self.natoms)
           rmsgrad_state[state].append(rms(grad_s1_tdci))
-    runtime = "rmsgrad_state runtime: {:10.6f} seconds\n".format(time.time() - start)
+    runtime = "rmsgrad_state runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
     return rmsgrad_state
 
-  # Is something wrong with this approach? I was doing it a different and weird way before...
   def get_state_projections(self):
     start = time.time()
     state_proj = {}
@@ -290,7 +289,7 @@ class plottables:
         improj = np.dot(cn[state], imcn)
         projnorm = np.sqrt( reproj**2 + improj**2 )
         state_proj[state].append(projnorm)
-    runtime = "get_state_projections runtime: {:10.6f} seconds\n".format(time.time() - start)
+    runtime = "get_state_projections runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
     return state_proj
 
@@ -305,7 +304,7 @@ class plottables:
     act_orbs = range(self.clsd, self.clsd+self.acti)
     
     for i in range(1,self.nstep):
-      if (i%500 == 0): print(i)
+      #if (i%500 == 0): print(i)
       dt = self.d+"electronic/"+str(i)+"/"
       s = read_bin_array(dt+"S_MIXED_MO.bin",self.nmo**2)
       s.resize((self.nmo,self.nmo))
@@ -313,24 +312,26 @@ class plottables:
       oos = 0
       diag = 0
       offdiag = 0
-      for i in act_orbs:
-        diag += s2[i][i]
-        for j in act_orbs:
-          if (i != j): # active block offdiag
-            offdiag += s2[i][j]
+      for j in act_orbs:
+        diag += s2[j][j]
+        for k in act_orbs:
+          if (j != k): # active block offdiag
+            offdiag += s2[j][k]
 
-      for i in range(0,self.nmo):
-        for j in range(0,self.nmo):
-          #  i XOR j is in the active space
+      for j in range(0,self.nmo):
+        for k in range(0,self.nmo):
+          #  j XOR k is in the active space
           # (rotations between active and non-active orbitals)
-          if (np.abs(s[i][j]) > 0 and  ( ( (i in act_orbs) and not (j in act_orbs)) or  ((j in act_orbs) and not (i in act_orbs)) )):
-            oos+=s2[i][j]
+          if (s2[j][k] > 0 and  ( ( (j in act_orbs) and not (k in act_orbs)) or  ((k in act_orbs) and not (j in act_orbs)) )):
+            oos+=s2[j][k]
+            if (s2[j][k] > 0.01) and (j > k):
+              print("step "+str(i)+": s2["+str(j)+"]["+str(k)+"] = "+str(s2[j][k]))
 
       self.S_sq_oos.append(oos)
       self.S_sq_actidiag.append(diag)
       self.S_sq_actioffdiag.append(offdiag)
       self.S_sq_actisum.append(diag+offdiag)
-    runtime = "get_S_diagnostics runtime: {:10.6f} seconds\n".format(time.time() - start)
+    runtime = "get_S_diagnostics runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
 
   def get_h5data(self):
@@ -355,7 +356,7 @@ class plottables:
     self.pe = 27.2114*np.array(h['pe'][1:])
     self.ke = 27.2114*np.array(h['ke'][1:])
     h.close()
-    runtime = "get_h5data runtime: {:10.6f} seconds\n".format(time.time() - start)
+    runtime = "get_h5data runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
 
   # get FOMO orbital energies and occupations
@@ -374,7 +375,7 @@ class plottables:
         else:
           self.fomo_eng[j[0]].append(j[1])
           self.fomo_occ[j[0]].append(j[2])
-    runtime = "get_fomodata runtime: {:10.6f} seconds\n".format(time.time() - start)
+    runtime = "get_fomodata runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
 
   def get_rmsgrad(self):
@@ -384,24 +385,26 @@ class plottables:
       dt = self.d+"electronic/"+str(i)+"/"
       grad = read_bin_array(dt+"tdcigrad_half.bin",3*self.natoms)
       rmsgrad.append(rms(grad))
-    runtime = "get_rmsgrad runtime: {:10.6f} seconds\n".format(time.time() - start)
+    runtime = "get_rmsgrad runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
     return rmsgrad
 
   def __init__(self, d, label, DoStateProjections=False, DoSDiagnostic=True):
     start_ = time.time()
     self.label = label
+    self.filelabel = self.label.replace("/","_").replace(" ","_")
     self.d = d
     self.DoStateProjections = DoStateProjections
     self.DoSDiagnostic = DoSDiagnostic
     self.get_h5data()
     self.init_params()
+    self.make_xyz_series()
     if DoSDiagnostic: self.get_S_diagnostics() # sets self.S_sq_*, where *: oos, actidiag, actioffdiag, actisum
     if self.DoFOMO: self.get_fomodata() # sets self.fomo_eng and self.fomo_occ dictionaries
     if self.DoGradStates: self.rmsgrad_state = self.get_state_grads()     
     if DoStateProjections: self.state_proj = self.get_state_projections()
     self.rmsgrad = self.get_rmsgrad()
-    runtime = "Total "+label+" runtime: {:10.6f} seconds\n".format(time.time() - start_)
+    runtime = "Total "+label+" runtime: {:10.6f} seconds".format(time.time() - start_)
     print(runtime);sys.stdout.flush()
 
 
@@ -417,6 +420,35 @@ class plottables:
         if endt > len(self.time)-5: break
     return startt, endt
 
+  def make_xyz_series(self):
+    print("Making "+self.filelabel+".xyz...")
+    start = time.time()
+    g = open(self.filelabel+".xyz", 'w')
+    for i in range(1,self.nstep):
+      outstring = ""
+      dt = self.d+"electronic/"+str(i)+"/"
+      with open(dt+"temp.xyz",'r') as f:
+        outstring += f.read()
+      g.write(outstring)
+    g.close()
+    runtime = "make_xyz_series runtime: {:10.6f} seconds".format(time.time() - start)
+
+
+def xyz_read(filename):
+  f = open(filename,'r')
+  n = int(f.readline())
+  f.readline()
+  atoms  = []
+  coords = np.empty([n, 3])
+  for i in range(0, n):
+    fields = f.readline().split()
+    if len(fields) != 4: break
+    atoms.append(fields[0])
+    coords[i][0] = float(fields[1])
+    coords[i][1] = float(fields[2])
+    coords[i][2] = float(fields[3])
+  f.close()
+  return (atoms, coords)
 
 
 

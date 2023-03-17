@@ -104,31 +104,36 @@ class Ehrenfest:
     
   # Prepare initial state and start propagation.
   def run_ehrenfest(self):
-    x, v, a, pe, recn, imcn = None, None, None, None, None, None
+    x, v, v_timestep, a, pe, recn, imcn = None, None, None, None, None, None, None
     t = 0
     if self.tc.config.RESTART:
       x, v, a, t, recn, imcn = self.loadstate()
     else:
       utils.clean_files(self.tc.config.JOBDIR) # Clean job directory
       geomfilename = self.tc.config.xyzpath # .xyz filename in job directory
-      self.atoms, x = utils.xyz_read(geomfilename)
-      #utils.h5py_update({'atoms': self.atoms})
-      self.masses = utils.getmasses(self.atoms)
-      # Call Terachem to Calculate states
-      gradout = self.tc.grad(x) # x should already be in angstroms here
-      t = 0.0
-      recn = gradout["states"][self.tc.config.initial_electronic_state]
-      imcn = np.zeros(len(recn))
+      self.atoms, x = utils.xyz_read(geomfilename) # x in angstroms initially
       x = x / bohrtoangs # cast Initial geometry to Bohr
-      v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
+      self.masses = utils.getmasses(self.atoms)
+      #utils.h5py_update({'atoms': self.atoms})
 
       if self.tc.config.WIGNER_PERTURB: # Perturb according to wigner distribution
         TCdata = self.tc.hessian(x*bohrtoangs, self.tc.config.WIGNER_TEMP )
         x, v_timestep = utils.initial_wigner( self.tc.config.WIGNER_SEED,
-                                              x*bohrtoangs, TCdata["hessian"], self.masses,
+                                              x, TCdata["hessian"], self.masses,
                                               self.tc.config.WIGNER_TEMP ) 
-	x = x / bohrtoangs
-	v_timestep = v_timestep / bohrtoangs
+	#x = x / bohrtoangs
+	#v_timestep = v_timestep / bohrtoangs
+        print(x)
+        utils.xyz_write(self.atoms, x*bohrtoangs, "wigner_output.xyz")
+
+
+      # Call Terachem to Calculate states
+      gradout = self.tc.grad(x*bohrtoangs)
+      t = 0.0
+      recn = gradout["states"][self.tc.config.initial_electronic_state]
+      imcn = np.zeros(len(recn))
+      v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
+
 
       a = np.zeros([len(self.atoms), 3]) # Accel at t=0
       v, a, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep!! \(^0^)/
