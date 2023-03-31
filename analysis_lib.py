@@ -117,11 +117,19 @@ def molden_orbs(filename):
   return orbs
 
 # Check if a float is in a list
-def float_in(flt, l):
-    delta = 1e-4
-    for i in l:
-        if np.abs(flt-i) < delta: return True
-    return False
+def float_in(flt, l, delta=1e-4):
+  for i in l:
+    if np.abs(flt-i) < delta: return True
+  return False
+
+# Returns the index of the first matching float
+# or False if none match
+def float_index(flt, l, delta=1e-4):
+  i = 0
+  while i < len(l):
+    if np.abs(flt-l[i]) < delta: return i
+    i+=1
+  return False
 
 # acti_ - length of matrix (all indices must be same length)
 # Uoo - rotation matrix (2-d array)

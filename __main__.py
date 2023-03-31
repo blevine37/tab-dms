@@ -18,6 +18,7 @@ if infile is None:
     infile = os.path.abspath("inputfile.py")
 # Default to using the example inputfile.py in the source code
 if infile is None:
+  print("No input file found in argument or cwd, using the inputfile.py in the source directory")
   infile = os.path.dirname(os.path.realpath(__file__)) + "/inputfile.py"
   if not os.path.isfile(infile): print("ERROR: Can't find input file!!")
 
@@ -31,8 +32,8 @@ l = tccontroller.logger()
 logprint = l.logprint
 
 #import inputfile
-input_module = utils.import_program_as_module(infile)
-config = utils.ConfigHandler(input_module)
+input_module = utils.import_program_as_module(infile) # Hack for importing an arbitrary py file as a namespace
+config = utils.ConfigHandler(input_module) # Include defaults
 
 if os.path.abspath(config.JOBDIR)+"/inputfile.py" != infile:
   shutil.copy(infile, os.path.abspath(config.JOBDIR)+"/inputfile.py")

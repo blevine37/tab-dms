@@ -815,6 +815,7 @@ class tccontroller:
     
 
   # find the last valid TDCI calculation for continuity, return step number.
+  # This function isn't used anywhere in the codebase right now.
   def restart(self):
     print("Detecting last valid TDCI calculation in "+str(self.JOBDIR)+"electronic/")
     joblist = [f for f in os.listdir(self.JOBDIR+"electronic/") if os.path.isdir(f) ]

@@ -249,6 +249,7 @@ def h5py_update(data):
   for key in h5f.keys():
     dset = h5f[key]
     if key not in static_keys:
+      # Need to be careful with inputs to make sure some arrays dont wind up longer than others
       dset.resize(dset.len() + 1, axis=0)
     if key in data:
       dset[-1] = data[key]
@@ -260,6 +261,7 @@ def h5py_update(data):
   time.sleep(1)
 
 
+# Take an h5 file from a previous run, and copy it up to a frame
 def h5py_copy_partial(oldh5f, lastframe, config):
   #new_oldfile = "".join(oldh5f.split(".")[:-1])
   #shutil.copy(oldh5f, new_oldfile+"_old.hdf5" )
@@ -501,9 +503,9 @@ class ConfigHandler:
 
 
 
-# Below code stolen from
+# Below code from
 # https://stackoverflow.com/questions/6811902/import-arbitrary-named-file-as-a-python-module-without-generating-bytecode-file
-# This should allow end user to put their python input files in arbitrary locations and be sloppy wih naming them
+# This should allow end user to put their python input files in arbitrary locations and be sloppy with naming them
 # also avoids creating a bytecode compiled version of the user's input file.
 import imp, contextlib
 @contextlib.contextmanager

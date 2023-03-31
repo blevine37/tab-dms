@@ -68,7 +68,7 @@ class Ehrenfest:
              'time'      : t,
               }
     if TCdata is None:
-      import pdb; pdb.set_trace()
+      #import pdb; pdb.set_trace()
       data.update({ 
                     'pe'        : 0,
 	            'tdci_dir'  : "",
@@ -162,25 +162,7 @@ class Ehrenfest:
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
       x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
       ReCn, ImCn = TCdata["recn"], TCdata["imcn"]
-      # Check for errors that need to modify propagation 
-      if (self.tc.config.FIX_FOMO and (TCdata["error"] == "FOMO GRADIENT ERROR")):
-        self.logprint("=====ERROR!!!!======")
-        self.logprint("FOMO GRADIENT ISSUE DETECTED")
-        self.logprint("Skipping this geometry by doing two half-length TDCIs")
-        # We can't get gradients at x. Replace this step with two half-steps
-        self.tc.N+=-1
-        #   First half-step use x_(it-1)
-        v_, a_, TCdata_ = self.halfstep(x_prev, v_prev, ReCn_prev, ImCn_prev)
-        # Propagate x_(it) to x_(it+1) using the grad from x_(it-1) at time t
-        x_next = x + v_*self.delta
-        self.logprint("First half-step complete")
-        # Now catch the electronic structure up to t+dt
-        v_2, a_2, TCdata_2 = self.halfstep(x_next, v_, TCdata_["recn"], TCdata_["imcn"])
-        x, v, ReCn, ImCn = x, v_, TCdata_2["recn"], TCdata_2["imcn"]
-        self.logprint("Second half-step complete")
-        self.savestate(x, v_, v_2, a_, t, TCdata_) # Triple-check the correctness of v_ and v_2 here...
-      else:
-	self.savestate(x, v_timestep, v, a, t, TCdata)
+      self.savestate(x, v_timestep, v, a, t, TCdata)
       self.logprint("Iteration " + str(it).zfill(4) + " finished")
       it+=1
     self.logprint("Completed Ehrenfest Propagation!")

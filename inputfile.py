@@ -14,13 +14,13 @@ TERACHEM = "/home/adurden/terachem/build/bin/" # directory containing terachem e
 
 TIMESTEP_AU = 4.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attoseconds
 # Terminate after MAXITERS nuclear timesteps
-MAXITERS = 1000000 / (24.0*TIMESTEP_AU) # 1000 fs
+MAXITERS = 1000000 / (24.189*TIMESTEP_AU) # 1000 fs
 
-FIX_FOMO = False   # This is still not working. Intended to solve a FOMO-gradient bug in CAS(2,2)
 
 WIGNER_PERTURB = True   # Perturb the initial position and velocity based on Wigner distribution
 WIGNER_TEMP = 0.0       # Temperature for Wigner distribution
-WIGNER_SEED = 87062     # Random seed for Wigner distribution sampling
+import random
+WIGNER_SEED = random.randint(0, 2**32-1)     # Random seed for Wigner distribution sampling
 
 ########################################
 # TDCI TeraChem Template
@@ -42,7 +42,6 @@ TDCI_TEMPLATE = {
   "cphftol"              : "1.0e-10",
   #"basis"                : "6-311++g[2d,2p]",
   #"basis"                : "sto-3g",
-  #"basis"                : "3-21g",
   "basis"                : "3-21g",
   "method"               : "hf",
   "charge"               : "0",
@@ -61,7 +60,6 @@ TDCI_TEMPLATE = {
   "tdci_floquet"         : "no",
   "tdci_floquet_photons" : "4",
   "cpcisiter"            : "350",
-  #"fon_mix"              : "no",
   "casci"                : "yes",  # no if using CISNO or CASSCF
   "ci_solver"            : "direct",
   "dcimaxiter"           : "300",
@@ -80,6 +78,7 @@ TDCI_TEMPLATE = {
   "fon"                  : "yes",
   "fon_method"           : "gaussian",
   "fon_temperature"      : "0.15",
+  #"fon_mix"              : "no",
   #"cisno"                : "yes",
   #"cisnostates"          : "6",
   #"cisnumstates"         : "6",
@@ -98,6 +97,8 @@ TDCI_TEMPLATE = {
 #   code here to generate the waveform, below is a CW tuned to ethylene
 #   Function should accept np.arrays in units of AU time and return AU Electric field units.
 #   This function then gets fed to tccontroller to generate the field on different TDCI steps
+#  INPUT:  t is a numpy array
+#  OUTPUT: out is a numpy array (same length as t)
 import numpy as np
 def f0_values(t):
   return 0*t # Turn off field completely.
