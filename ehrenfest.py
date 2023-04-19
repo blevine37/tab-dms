@@ -85,11 +85,7 @@ class Ehrenfest:
     if atoms is not None:
       data['atoms'] = atoms
     self.logprint("Updating HDF5")
-    # TODO: save the tdci directory and other stuff from TCdata
     utils.h5py_update(data)
-    # Print HDF5 contents
-    #self.logprint("Printing HDF5 contents")
-    #utils.h5py_printall()
 
   def loadstate(self):
     config = self.tc.config
@@ -136,8 +132,8 @@ class Ehrenfest:
 
 
       a = np.zeros([len(self.atoms), 3]) # Accel at t=0
-      v, a, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep!! \(^0^)/
-      self.savestate(x, v_timestep, v, a, t, TCdata, atoms=self.atoms) # Save initial state?
+      v, a, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep
+      self.savestate(x, v_timestep, v, a, t, TCdata, atoms=self.atoms) # Save initial state
 
     self.propagate(x, v, t, recn, imcn)
     

@@ -639,7 +639,13 @@ class job:
     #del moldenwriter 
     
     # Format output structure
+    # How should we control this when we have an external field?
+    eng_start = float(self.scan_outfile(["Initial", "energy:"], 2))
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
+    if np.abs( eng - eng_start) > 0.005: 
+      print("Energy changed too much during TDCI: {} -> {}".format(eng_start, eng))
+      return False
+
 
     if os.path.exists(self.dir+"gradinit.bin"):
       grad_init = read_bin_array(self.dir+"gradinit.bin", 3*self.Natoms)

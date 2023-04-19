@@ -459,5 +459,25 @@ def xyz_read(filename):
   return (atoms, coords)
 
 
+# returns a linear red->blue scale in rgb tuples
+def rgb_linspace(n, mult=0.85 ):
+  ar = np.array
+  a = np.linspace(0, 2, n)
+  rgbs = []
+  for i in range(0,n):
+    if a[i] == 0:
+      rgbs.append(mult*ar([1.,0.,0.]))
+    elif a[i] < 1:
+      rgbs.append(mult*ar([1-a[i],a[i],0]))
+    elif a[i] == 1:
+      rgbs.append(mult*ar([0.,1.,0.]))
+    elif a[i] < 2:
+      rgbs.append(mult*ar([(0.,2-a[i],a[i]-1]))
+    elif a[i] == 2:
+      rgbs.append(mult*ar([0.,0.,1.]))
+  return rgbs
+
+
+
 
 
