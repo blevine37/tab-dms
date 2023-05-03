@@ -11,6 +11,7 @@ import subprocess
 bohrtoangs = 0.529177210903
 # Atomic unit of time to seconds (s)
 autimetosec = 2.4188843265857e-17
+AUT2AS = 24.188843265857 # Atomic unit of time to Attoseconds
 
 
 
@@ -260,6 +261,15 @@ def h5py_update(data):
   # think that might be due to filesystem lag or something idk so here's a sleep
   time.sleep(1)
 
+# Old runs use testN.in/out filenames, we use tc.in/out now.
+def rename_legacy(dirpath):
+  d = dirpath
+  if os.path.exists(d+"electronic/1/test1.out"): # Need to rename all the testN.in/out files to tc.in/out
+    for i in range(1,self.nstep):
+      dt = d + "electronic/"+str(i)+"/"
+      os.rename( dt+"test"+str(i)+".in", dt+"tc.in")
+      os.rename( dt+"test"+str(i)+".out", dt+"tc.out")
+
 
 # Take an h5 file from a previous run, and copy it up to a frame
 def h5py_copy_partial(oldh5f, lastframe, config):
@@ -267,6 +277,7 @@ def h5py_copy_partial(oldh5f, lastframe, config):
   #shutil.copy(oldh5f, new_oldfile+"_old.hdf5" )
   new_oldfile = oldh5f
   dirpath = os.path.dirname(oldh5f)
+  rename_legacy(dirpath)
   if dirpath != "": dirpath=dirpath+"/"
   if os.path.exists(dirpath+"data.hdf5"):
      shutil.move(dirpath+"data.hdf5", dirpath+"data_old.hdf5")
@@ -435,7 +446,6 @@ class ConfigHandler:
     self.SCHEDULER = config.SCHEDULER
     self.TERACHEM = config.TERACHEM
     self.TIMESTEP_AU = config.TIMESTEP_AU # Dynamics time step in atomic units
-    self.nstep = config.NSTEPS_TDCI
     self.nfields = config.nfields
     self.krylov_end = config.krylov_end
     self.krylov_end_n = config.krylov_end_n
@@ -449,9 +459,19 @@ class ConfigHandler:
     try: self.FIX_FOMO = config.FIX_FOMO
     except: pass
 
-    self.MAXITERS = 999999999999999
-    try: self.MAXITERS = config.MAXITERS
+    self.DURATION = 999999999999999
+    try: self.DURATION = config.DURATION
     except: pass
+
+    self.TIMESTEP_E_AS = 0.10 # Electronic Timestep in Attoseconds
+    try: self.TIMESTEP_E_AS = config.TIMESTEP_E_AS
+    except: pass
+    
+    # Make sure TIMESTEP_AU is actually a multiple of TIMESTEP_E_AS
+    self.NSTEPS_TDCI = int((AUT2AS*self.TIMESTEP_AU)/self.TIMESTEP_E_AS)
+    self.nstep = self.NSTEPS_TDCI
+    self.TIMESTEP_AU = (self.TIMESTEP_E_AS*self.NSTEPS_TDCI)/AUT2AS
+    self.MAXITERS = int(self.DURATION*1000/(AUT2AS*self.TIMESTEP_AU))+1
 
     self.WIGNER_PERTURB = False
     self.WIGNER_TEMP = 0.0

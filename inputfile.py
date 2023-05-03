@@ -13,8 +13,8 @@ TERACHEM = "/home/adurden/terachem/build/bin/" # directory containing terachem e
 
 
 TIMESTEP_AU = 4.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attoseconds
-# Terminate after MAXITERS nuclear timesteps
-MAXITERS = 1000000 / (24.189*TIMESTEP_AU) # 1000 fs
+# Note: TIMESTEP_AU may be altered slightly to make it a multiple of the electronic timestep.
+DURATION = 1000 # Time to simulate in femtoseconds
 
 
 WIGNER_PERTURB = True   # Perturb the initial position and velocity based on Wigner distribution
@@ -27,7 +27,6 @@ WIGNER_SEED = random.randint(0, 2**32-1)     # Random seed for Wigner distributi
 ########################################
 
 TIMESTEP_E_AS = 1.0           # Electronic timestep in attoseconds
-NSTEPS_TDCI = int((24.189*TIMESTEP_AU)/TIMESTEP_E_AS) # Number of electronic timesteps in one nuclear timestep.
 nfields = 1              # number of distinct fields (generally for multichromatic floquet)
 krylov_end = False       # Generate approximate eigenstates at end of calculation?
 krylov_end_n = 5         # Number of steps to save wfn on to generate approx eigenstates with.

@@ -131,62 +131,6 @@ def float_index(flt, l, delta=1e-4):
     i+=1
   return False
 
-# acti_ - length of matrix (all indices must be same length)
-# Uoo - rotation matrix (2-d array)
-# Vtuvw - 4-index tensor to rotate (1-d array)
-# This code was previously used to rotate 2-electron integrals, but we
-#   scrapped this approach and rotate the CI vector instead.
-def rotate_4index(acti_, Uoo, Vtuvw):
-
-  # Rotate 2-electron integrals with Uoo
-  # (i'j|kl) = Sum_i Uii' (ij|kl)
-  # (i'j'|kl) = Sum_j Ujj' (i'j|kl)
-  # (i'j'|k'l) = Sum_k Ukk' (i'j'|kl)
-  # (i'j'|k'l') = Sum_l Ull' (i'j'|k'l)
-  tempVtuvw = np.zeros( (acti_,acti_,acti_,acti_) )
-  tempVtuvw2 = np.zeros( (acti_,acti_,acti_,acti_) )
-  # 1. (i'j|kl) = Sum_i Uii' (ij|kl)
-  for i_ in range(0, acti_):
-    for j in range(0, acti_):
-      for k in range(0, acti_):
-        for l in range(0, acti_):
-          tempVtuvw[i_][j][k][l] = 0;
-          for i in range(0, acti_):
-            tempVtuvw[i_][j][k][l] += Uoo[i][i_] * Vtuvw[i][j][k][l]
-
-
-  # 2. (i'j'|kl) = Sum_j Ujj' (i'j|kl)
-  for i_ in range(0, acti_):
-    for j_ in range(0, acti_):
-      for k in range(0, acti_):
-        for l in range(0, acti_):
-          tempVtuvw2[i_][j_][k][l] = 0;
-          for j in range(0, acti_):
-            tempVtuvw2[i_][j_][k][l] += Uoo[j][j_] * tempVtuvw[i_][j][k][l]
-
-
-  # 3. (i'j'|k'l) = Sum_k Ukk' (i'j'|kl)
-  for i_ in range(0, acti_):
-    for j_ in range(0, acti_):
-      for k_ in range(0, acti_):
-        for l in range(0, acti_):
-          tempVtuvw[i_][j_][k_][l] = 0;
-          for k in range(0, acti_):
-            tempVtuvw[i_][j_][k_][l] += Uoo[k][k_] * tempVtuvw2[i_][j_][k][l]
-
-
-  # 4. (i'j'|k'l') = Sum_l Ull' (i'j'|k'l)
-  for i_ in range(0, acti_):
-    for j_ in range(0, acti_):
-      for k_ in range(0, acti_):
-        for l_ in range(0, acti_):
-          tempVtuvw2[i_][j_][k_][l_] = 0;
-          for l in range(0, acti_):
-            tempVtuvw2[i_][j_][k_][l_] += Uoo[l][l_] * tempVtuvw[i_][j_][k_][l]
-  return tempVtuvw2
-
-
-
 
 rms = lambda x_seq: (sum(x*x for x in x_seq)/len(x_seq))**(1/2)
 
