@@ -87,7 +87,13 @@ def dictkey(key):
              "tdci_grad_init", "tdci_grad_half", "tdci_grad_end", "tdci_fieldfile0",
              "tdci_fieldfile1", "tdci_fieldfile2", "tdci_fieldfile3", "tdci_fieldfile4",
              "casci", "fon", "fon_method", "fon_temperature", "ci_solver", "dcimaxiter",
-             "dciprintinfo", "dcipreconditioner", "closed", "active", "cassinglets",
+             "dciprintinfo", "dcipreconditioner",
+             "cisno", "cisnostates", "cisnumstates", "cisguessvecs", "cismaxiter",
+             "cisconvtol", 
+             "casscf", "casweights", "dynamicweights", "casscfmaxiter", "casscfnriter",
+             "casscfconvthre", "casscfenergyconvthre", "cpsacasscfmaxiter",
+             "cpsacasscfconvthre", "cpsacasscfsolver", 
+             "closed", "active", "cassinglets",
              "casdoublets", "castriples", "casquartets", "cascharges", "cas_ntos",]
   if key in keylist:
     return keylist.index(key)
@@ -190,12 +196,17 @@ class logger():
       os.rename("log", "log.1")
 
   # logprint(string) will write a timestamped string to the log, and to STDOUT
-  def logprint(self, string, PRINT=True):
-    writestr = "["+time.asctime()+"] "+string+"\n"
+  def logprint(self, string, stdout=True, timestamp=True, end="\n"):
+    writestr = ""
+    if timestamp:
+      writestr = "["+time.asctime()+"] "+string+end
+    else:
+      writestr = string+end
     f = open("log",'a')
     f.write(writestr)
     f.close()
-    print(writestr, end='')
+    if stdout:
+      print(writestr, end='')
 
 
 class molden:
@@ -248,9 +259,9 @@ class job:
     self.pjob = pjob
     self.config = CONFIG
     if halfstep:
-      if FIELD_INFO["half"] == 0: # This is the first half of the timestep
+      if FIELD_INFO["half"] == 0: # Halfstep that goes from t -> t+.5dt
 	self.dir = JOBDIR+"electronic/"+str(n)+"h0/"
-      if FIELD_INFO["half"] == 1: # This is the second half of the timestep
+      if FIELD_INFO["half"] == 1: # Halfstep that goes from t+.5dt -> t+dt
 	self.dir = JOBDIR+"electronic/"+str(n)+"h1/"
     else:
       self.dir = JOBDIR+"electronic/"+str(n)+"/"
@@ -270,33 +281,31 @@ class job:
     if not noclean:
       self.clean_files()
 
-  def start(self):
-    p = subprocess.Popen( 'bash '+self.dir+'tdci.job', shell=True)
-    return p
-
   def readmisc(self):
     f = open(self.dir+"misc.bin",'rb')
     self.ndets, self.nmo, self.nbf = struct.unpack('iii', f.read())
     f.close();del f
 
-  def make_files(self):
+  def make_files(self, TDCI_TEMPLATE=None):
+    if TDCI_TEMPLATE is None:
+      TDCI_TEMPLATE = self.TDCI_TEMPLATE
     makedirs(self.dir)
     xyz_write(self.FIELD_INFO["atoms"], self.xyz, self.dir+"temp.xyz")
     with open(self.dir+"tdci.job", 'w') as templatefile:
       templatefile.write(self.JOB_TEMPLATE)
     time.sleep(1) # make sure file gets written and closed properly
     search_replace_file(self.dir+"tdci.job", "temppath", self.dir)
-    search_replace_file(self.dir+"tdci.job", "tempname", "test"+str(self.n))
+    #search_replace_file(self.dir+"tdci.job", "tempname", "test"+str(self.n))
+    search_replace_file(self.dir+"tdci.job", "tempname", "tc")
     
-    tempname = "test"+str(self.n)+".in"
-    dict_to_file(self.TDCI_TEMPLATE, self.dir+"/"+tempname)
-    if self.gradjob:
-      search_replace_file(self.dir+tempname, "tdci_fieldfile0 field0.bin", "")
-      search_replace_file(self.dir+tempname, "tdci_fieldfile1 field1.bin", "")
-      search_replace_file(self.dir+tempname, "tdci_fieldfile2 field2.bin", "")
+    #tempname = "test"+str(self.n)+".in"
+    tempname = "tc.in"
+    dict_to_file(TDCI_TEMPLATE, self.dir+"/"+tempname)
+    if self.gradjob: # Fieldfiles
+      pass
     else:
       self.make_fieldfiles()
-    if (self.gradjob) or (self.n==0):
+    if (self.gradjob) or (self.n==0): # No diabatization
       search_replace_file(self.dir+tempname, "tdci_diabatize_orbs yes", "tdci_diabatize_orbs no")
       if self.ReCn is None:
         search_replace_file(self.dir+tempname, "tdci_recn_readfile recn_init.bin", "")
@@ -365,17 +374,8 @@ class job:
       logprint("Final wfn norm (AES basis): "+str(norm))
       krylov_MO_Re = np.matmul(np.transpose(output["krylov_states"]), output["recn_krylov"])
       krylov_MO_Im = np.matmul(np.transpose(output["krylov_states"]), output["recn_krylov"])
-      #print("Checking AES basis quality:")
-      #print("ReCn:")
-      #print(output["recn"])
-      #print("ImCn:")
-      #print(output["imcn"])
-      #print("ReCn (AES->MO):")
-      #print(krylov_MO_Re)
-      #print("ImCn (AES->MO):")
-      #print(krylov_MO_Im)
       overlap = np.dot(krylov_MO_Re,output["recn"])**2 + np.dot(krylov_MO_Im,output["imcn"])**2
-      logprint("Overlap of AES-MO with MO:"+str(overlap))
+      logprint("Overlap of WF(AES->MO) with WF(MO):"+str(overlap))
     if outputgood:
       return True
     else:
@@ -386,7 +386,8 @@ class job:
   # Detection works by checking if any FOMO orbitals are degenerate, and if the deviation of rmsgrad between N-1 and N is 50% more than deviation of rmsgrad between N-2 and N-1, then we detect a problem. 
   def check_FOMO_grad_error(self, grad):
     logprint = self.logger.logprint
-    fomodata = scan_fomo( self.dir+"test"+str(self.n)+".out")
+    #fomodata = scan_fomo( self.dir+"test"+str(self.n)+".out")
+    fomodata = scan_fomo( self.dir+"tc.out")
     has_degenerates = False
     # fomodata contains 2 closed and 2 virtual orbitals in addition to the active orbitals
     for i in range(2, len(fomodata)-3): # e is ( index, energy, occupation )
@@ -461,32 +462,15 @@ class job:
 
   def run_safely(self):
     logprint = self.logger.logprint
+    tdci_template = copy.deepcopy(self.TDCI_TEMPLATE)
     # Run the job
     retries = 0
     while (retries < 3):
       if not self.noclean:
         self.clean_files()
         self.make_files()
-      p = self.start()
       logprint("Started "+str(self.dir)+"\n")
-      finished = False
-      # Periodically check if the process is finished
-      i = 1
-      status = "TC Running."
-      print(status, end=""); sys.stdout.flush()
-      while not finished:
-        if self.check_status(p):
-          print(""); sys.stdout.flush()
-          finished = True
-        else: # fun rotating dots
-          if (i%10 == 0):
-            print("\b"*9, end="");
-            print(" "*9, end="");
-            print("\b"*9, end=""); sys.stdout.flush()
-          else:
-            print(".", end=""); sys.stdout.flush()
-        time.sleep(1)
-        i+=1
+      self.run_job() # Run TeraChem and wait!
       # Make sure output is good
       if self.gradjob: # if we're doing gradient only (not tdci) for initial step
         output = self.gradoutput()
@@ -498,36 +482,61 @@ class job:
         output = self.read_hessfile(scrdir+"Hessian.bin")
       else: # normal tdci
 	output = self.output()
-      if output: # Everything checks out!
+
+      if type(output) is dict: # Everything checks out!
         logprint("Output looks good!")
         return output
+
       else: # Outputs bad, try redoing the job!
         logprint("Output is bad. Restarting the job. See bad jobfiles in ./badjobs/"+str(self.n)+"_"+str(retries))
         makedirs("./badjobs/"+str(self.n)+"_"+str(retries))
         shutil.copytree( self.dir, "badjobs/"+str(self.n)+"_"+str(retries))
+        if (retries > 0): # See if output is an error message we can do something about
+          if output == "SCF_CONVERGENCE":
+            logprint("Bad SCF Convergence detected.. Retrying with 'scf diis+a' in input.")
+            tdci_template["scf"] = "diis+a"
+
       retries+=1
     logprint("Went through 3 retries and output is still bad T_T\n")
     return output
 
-      
-  def check_status(self, p):
-    if self.SCHEDULER:
-      # TODO: Need to call squeue and decipher it's output
-      pass
-    else: 
-      result = p.poll()
-      #print(result)
-      if result != None: # returns None if still running
-        return True
-      else:
-        return False
+
+  def run_job(self):
+    p = subprocess.Popen( 'bash '+self.dir+'tdci.job', shell=True)
+    finished = False
+    # Periodically check if the process is finished
+    i = 1
+    status = "TC Running."
+    print(status, end=""); sys.stdout.flush()
+    while not finished:
+      if p.poll() is None: # Still running, rotate dots
+	if (i%10 == 0): 
+	  print("\b"*9+" "*9+"\b"*9, end=""); # Erase dots
+	  sys.stdout.flush()
+	else:
+	  print(".", end=""); sys.stdout.flush()
+      else: # Finished!
+	print(""); sys.stdout.flush()
+	finished = True
+      time.sleep(1)
+      i+=1
+
+
+  def fail_reason(self):
+    with open(self.dir+'tc.out') as f:
+      # mmap avoids loading the whole file at once
+      s = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+      if s.find("SCF did not converge"):
+        return "SCF_CONVERGENCE"
+
 
   # key : list of words that match the beginning of line.split()
   # For ndets, ["Number", "of", "determinants:"]
   # pos : the index of the element to be returned from matching line.split()
   def scan_outfile(self, key, pos):
     logprint = self.logger.logprint
-    f = open(self.dir+"test"+str(self.n)+".out", 'r')
+    #f = open(self.dir+"test"+str(self.n)+".out", 'r')
+    f = open(self.dir+"tc.out", 'r')
     l = f.readline()
     while l != "":
       if (len(l.split()) > len(key)):
@@ -566,6 +575,7 @@ class job:
 
   def gradoutput(self):
     logprint = self.logger.logprint
+    fail_reason = ""
     filesgood = True
     files = ["gradinit.bin", "States_Cn.bin", "States_E.bin", "misc.bin"]
     for fn in files:
@@ -573,6 +583,7 @@ class job:
         filesgood = False
         logprint("ERROR: "+fn+" missing")
     if not filesgood:
+      
       return False
     grad = read_bin_array(self.dir+"gradinit.bin", 3*self.Natoms)
     grad.resize((self.Natoms,3))
@@ -633,10 +644,6 @@ class job:
 
     if (self.ndets == 0):
       self.readmisc()
-    # rewrites the molden file with just the active orbitals
-    #   Diabatization rotates the CI vector instead of orbitals now, so there's no reason to do this anymore.
-    #moldenwriter = molden(self.dir+"tdci.molden", clsd, acti)
-    #del moldenwriter 
     
     # Format output structure
     # How should we control this when we have an external field?
@@ -753,6 +760,7 @@ class job:
     else:
       return False
 
+
   def sanity_test(self, output):
     logprint = self.logger.logprint
     logprint("Sanity test on output...")
@@ -807,8 +815,9 @@ class tccontroller:
     #if self.RESTART:
     #  self.restart()
 
-  # Need to populate self.prevjob so orbital diabatization takes place
-  # start job with noclean so that we can use the files setup by reading hdf5
+  # Prepare for restarting the dynamics simulation partway through
+  #   Need to populate self.prevjob so orbital diabatization takes place
+  #   start job with noclean so that we can use the files setup by reading hdf5
   def restart_setup(self):
     self.FIELD_INFO["half"] = 1 
     print("Setting prevjob: "+str(self.N-1))
@@ -822,7 +831,8 @@ class tccontroller:
 
   # find the last valid TDCI calculation for continuity, return step number.
   # This function isn't used anywhere in the codebase right now.
-  def restart(self):
+  # Should be easier to just check the log..
+  def last_valid_job(self):
     print("Detecting last valid TDCI calculation in "+str(self.JOBDIR)+"electronic/")
     joblist = [f for f in os.listdir(self.JOBDIR+"electronic/") if os.path.isdir(f) ]
     joblist.sort(reverse=True) # highest numbered directories will be at the start of the list
@@ -853,10 +863,6 @@ class tccontroller:
   def grad(self, xyz, ReCn=None, ImCn=None):
     grad_template = copy.deepcopy(self.TDCI_TEMPLATE)
     # overwrite template to do gradient stuff instead of tdci
-    #grad_template["run"] = "gradient"
-    #grad_template["cassavevectors"] = "yes"
-    #grad_template["casgradmult"] = "1 1 1"
-    #grad_template["casgradstate"] = "0 1 2"
     grad_template["tdci_grad_init"] = "yes"
     grad_template["tdci_grad_half"] = "no"
     grad_template["tdci_grad_end"] = "no"
@@ -864,6 +870,11 @@ class tccontroller:
     grad_template["tdci_simulation_time"] = "0.01"
     grad_template["tdci_nstep"] = "1"
     grad_template["tdci_krylov_end"] = "no"
+    grad_template["tdci_diabatie_orbs"] = "no"
+    remove_keys = ["tdci_fieldfile0", "tdci_fieldfile1", "tdci_fieldfile2", 
+                   "tdci_prevorbs_readfile", "tdci_prevcoords_readfile", "tdci_krylov_init"]
+    for key in remove_keys:
+      if key in grad_template: del grad_template[key]
     j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.gradjob = True
     j.dir = self.JOBDIR+"electronic/grad/"
@@ -872,7 +883,7 @@ class tccontroller:
 
   def hessian(self, xyz, temp):
     hess_template = copy.deepcopy(self.TDCI_TEMPLATE)
-    hess_template["run"] = "frequencies"
+    hess_template["run"] = "frequencies" # Freq job will automatically ignore tdci_ params
     hess_template["to"] = str(temp)
     hess_template["mincheck"] = "false" # Really cool that every other tc param uses yes/no but this one uses false
     j = job(self.N, self.Natoms, self.Nkrylov, None, None, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, hess_template, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER)

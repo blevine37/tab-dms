@@ -233,16 +233,22 @@ class plottables:
     #nmo, clsd, ndets, acti, nstates, natoms = 26, 7, 4, 2, 3, 6
     d = self.d
     dt = self.d + "electronic/1/"
+    if os.path.exists(dt+"test1.out"): # Need to rename all the testN.in/out files to tc.in/out
+      for i in range(1,self.nstep):
+        dt = d + "electronic/"+str(i)+"/"
+        os.rename( dt+"test"+str(i)+".in", dt+"tc.in")
+        os.rename( dt+"test"+str(i)+".out", dt+"tc.out")
+      
     # we could save some time if we make a scan_outfile function does multiple of these...
-    self.nmo = int(scan_outfile(dt+"test1.out", ["Number", "of", "molecular", "orbitals:"], 4))
-    self.clsd = int(scan_outfile(dt+"test1.out", ["Number", "of", "closed", "orbitals:"], 4))
-    self.ndets = int(scan_outfile(dt+"test1.out", ["Number", "of", "determinants:"], 3))
-    self.acti = int(scan_outfile(dt+"test1.out", ["Number", "of", "active", "orbitals:"], 4))
-    nsinglets = int(scan_outfile(dt+"test1.out", ["Number", "of", "singlet", "states:"], 4))
-    ndoublets = int(scan_outfile(dt+"test1.out", ["Number", "of", "doublet", "states:"], 4))
-    ntriplets = int(scan_outfile(dt+"test1.out", ["Number", "of", "triplet", "states:"], 4))
-    nquartets = int(scan_outfile(dt+"test1.out", ["Number", "of", "quartet", "states:"], 4))
-    nquintets = int(scan_outfile(dt+"test1.out", ["Number", "of", "quintet", "states:"], 4))
+    self.nmo = int(scan_outfile(dt+"tc.out", ["Number", "of", "molecular", "orbitals:"], 4))
+    self.clsd = int(scan_outfile(dt+"tc.out", ["Number", "of", "closed", "orbitals:"], 4))
+    self.ndets = int(scan_outfile(dt+"tc.out", ["Number", "of", "determinants:"], 3))
+    self.acti = int(scan_outfile(dt+"tc.out", ["Number", "of", "active", "orbitals:"], 4))
+    nsinglets = int(scan_outfile(dt+"tc.out", ["Number", "of", "singlet", "states:"], 4))
+    ndoublets = int(scan_outfile(dt+"tc.out", ["Number", "of", "doublet", "states:"], 4))
+    ntriplets = int(scan_outfile(dt+"tc.out", ["Number", "of", "triplet", "states:"], 4))
+    nquartets = int(scan_outfile(dt+"tc.out", ["Number", "of", "quartet", "states:"], 4))
+    nquintets = int(scan_outfile(dt+"tc.out", ["Number", "of", "quintet", "states:"], 4))
     self.nstates = int(nsinglets) + int(ndoublets) + int(ntriplets) + int(nquartets) + int(nquintets)
     self.natoms = 0
     with open(dt+"temp.xyz","r") as xyzf:
@@ -250,13 +256,13 @@ class plottables:
 
     # check if we're running fomo
     self.DoFOMO = False
-    fomo = scan_outfile(dt+"test1.in", ["fon"], 1)
+    fomo = scan_outfile(dt+"tc.in", ["fon"], 1)
     if fomo == "yes":
       self.DoFOMO = True
 
     # Check if we calculated gradients of each state
     self.DoGradStates = False
-    tdci_grad_states = scan_outfile(dt+"test1.in", ["tdci_grad_states"], 1)
+    tdci_grad_states = scan_outfile(dt+"tc.in", ["tdci_grad_states"], 1)
     if tdci_grad_states == "yes":
       self.DoGradStates = True
     runtime = "init_params runtime: {:10.6f} seconds".format(time.time() - start)
@@ -295,7 +301,8 @@ class plottables:
       for state in range(0, self.nstates):
         reproj = np.dot(cn[state], recn) 
         improj = np.dot(cn[state], imcn)
-        projnorm = np.sqrt( reproj**2 + improj**2 )
+        #projnorm = np.sqrt( reproj**2 + improj**2 )
+        projnorm = reproj**2 + improj**2 
         state_proj[state].append(projnorm)
     runtime = "get_state_projections runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
@@ -375,7 +382,8 @@ class plottables:
     self.fomo_occ = {}
     for i in range(1, self.nstep):
       # scan_fomo returns a list of [ (orb_index, orb_energy, orb_occupation),... ]
-      fomotemp = scan_fomo(d+"electronic/"+str(i)+"/test"+str(i)+".out")
+      #fomotemp = scan_fomo(d+"electronic/"+str(i)+"/test"+str(i)+".out")
+      fomotemp = scan_fomo(d+"electronic/"+str(i)+"/tc.out")
       for j in fomotemp:
         if j[0] not in self.fomo_eng: # make sure there is a key for this orbital
           self.fomo_eng[j[0]] = [j[1]]
@@ -472,7 +480,7 @@ def rgb_linspace(n, mult=0.85 ):
     elif a[i] == 1:
       rgbs.append(mult*ar([0.,1.,0.]))
     elif a[i] < 2:
-      rgbs.append(mult*ar([(0.,2-a[i],a[i]-1]))
+      rgbs.append(mult*ar([(0.,2-a[i],a[i]-1)]))
     elif a[i] == 2:
       rgbs.append(mult*ar([0.,0.,1.]))
   return rgbs

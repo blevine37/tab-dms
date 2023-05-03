@@ -26,8 +26,8 @@ WIGNER_SEED = random.randint(0, 2**32-1)     # Random seed for Wigner distributi
 # TDCI TeraChem Template
 ########################################
 
-NSTEPS_TDCI = 1000       # Number of electronic timesteps in one nuclear timestep.
-                         #   Electronic timestep duration will be TIMESTEP_AU / NSTEPS_TDCI
+TIMESTEP_E_AS = 1.0           # Electronic timestep in attoseconds
+NSTEPS_TDCI = int((24.189*TIMESTEP_AU)/TIMESTEP_E_AS) # Number of electronic timesteps in one nuclear timestep.
 nfields = 1              # number of distinct fields (generally for multichromatic floquet)
 krylov_end = False       # Generate approximate eigenstates at end of calculation?
 krylov_end_n = 5         # Number of steps to save wfn on to generate approx eigenstates with.
@@ -60,7 +60,6 @@ TDCI_TEMPLATE = {
   "tdci_floquet"         : "no",
   "tdci_floquet_photons" : "4",
   "cpcisiter"            : "350",
-  "casci"                : "yes",  # no if using CISNO or CASSCF
   "ci_solver"            : "direct",
   "dcimaxiter"           : "300",
   "dciprintinfo"         : "yes",
@@ -75,17 +74,27 @@ TDCI_TEMPLATE = {
   #"tdci_sanitytest"      : "no",
 
   # orbital options
+  #"casci"                : "no",  # no if using CISNO or CASSCF, yes for FOMO or HF
   "fon"                  : "yes",
   "fon_method"           : "gaussian",
   "fon_temperature"      : "0.15",
   #"fon_mix"              : "no",
   #"cisno"                : "yes",
-  #"cisnostates"          : "6",
-  #"cisnumstates"         : "6",
-  #"cisguessvecs"         : "8",
+  #"cisnostates"          : "3",
+  #"cisnumstates"         : "3",
+  #"cisguessvecs"         : "3",
   #"cismaxiter"           : "500",
   #"cisconvtol"           : "1.0e-8",
-  #"casscf"               : "no",
+  #"casscf"               : "yes",
+  #"casweights"           : "[1,1,1]",
+  #"dynamicweights"       : "yes" # dynamic state weighting in casscf
+  #"casscfmaxiter"        : "300",   # Default: 50
+  #"casscfnriter"         : "300",   # Default: 20 (max newton-raphson iterations)
+  #"casscfconvthre"       : "1E-6",  # Default: 1E-6
+  #"casscfenergyconvthre" : "1E-8",  # Default: 1E-8
+  #"cpsacasscfmaxiter"    : "100",   # Default: 20
+  #"cpsacasscfconvthre"   : "1E-4",  # Default: "1E-4"
+  #"cpsacasscfsolver"     : "direct",
 
 }
 
@@ -125,10 +134,10 @@ def f0_values(t):
 # Job Template: Used to make a shell script that executes terachem 
 #   make sure you include temppath and tempname in your job template!
 #   those keywords are search and replaced
-job_template_contents = "#!/bin/bash\n\
-                         source /home/adurden/.bashrc\n\
-                         cd temppath\n\
-                        "+TERACHEM+"terachem tempname.in > tempname.out\n"
+job_template_contents = "#!/bin/bash\n"+
+                        "source /home/adurden/.bashrc\n"+
+                        "cd temppath\n"+
+                        TERACHEM+"terachem tempname.in > tempname.out\n"
 
 
 
