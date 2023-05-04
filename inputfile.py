@@ -21,6 +21,9 @@ WIGNER_PERTURB = True   # Perturb the initial position and velocity based on Wig
 WIGNER_TEMP = 0.0       # Temperature for Wigner distribution
 import random
 WIGNER_SEED = random.randint(0, 2**32-1)     # Random seed for Wigner distribution sampling
+# If you already ran a Hessian calculation, you can include the path to the Hessian.dat to skip the freq calculation
+HESSIAN_FILE = None
+
 
 ########################################
 # TDCI TeraChem Template

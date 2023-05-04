@@ -465,7 +465,7 @@ class job:
     tdci_template = copy.deepcopy(self.TDCI_TEMPLATE)
     # Run the job
     retries = 0
-    while (retries < 3):
+    while (retries < 6):
       if not self.noclean:
         self.clean_files()
         self.make_files()
@@ -495,9 +495,13 @@ class job:
           if output == "SCF_CONVERGENCE":
             logprint("Bad SCF Convergence detected.. Retrying with 'scf diis+a' in input.")
             tdci_template["scf"] = "diis+a"
+        if (retries > 2):
+          if output == "ENERGY_CHANGE":
+            logprint("Repeated TDCI energy change... Retrying with 10x as many TDCI steps.")
+            tdci_template["tdci_nstep"] = str(int(tdci_template["tdci_nstep"])*10)
 
       retries+=1
-    logprint("Went through 3 retries and output is still bad T_T\n")
+    logprint("Went through {} retries and output is still bad T_T\n".format(retries))
     return output
 
 
@@ -526,7 +530,7 @@ class job:
     with open(self.dir+'tc.out') as f:
       # mmap avoids loading the whole file at once
       s = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-      if s.find("SCF did not converge"):
+      if s.find("SCF did not converge") != -1:
         return "SCF_CONVERGENCE"
 
 
@@ -575,7 +579,6 @@ class job:
 
   def gradoutput(self):
     logprint = self.logger.logprint
-    fail_reason = ""
     filesgood = True
     files = ["gradinit.bin", "States_Cn.bin", "States_E.bin", "misc.bin"]
     for fn in files:
@@ -640,7 +643,7 @@ class job:
 
     if not self.files_good():
       logprint("output(): Files bad, aborting output")
-      return False
+      return self.fail_reason()
 
     if (self.ndets == 0):
       self.readmisc()
@@ -649,9 +652,9 @@ class job:
     # How should we control this when we have an external field?
     eng_start = float(self.scan_outfile(["Initial", "energy:"], 2))
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
-    if np.abs( eng - eng_start) > 0.005: 
+    if np.abs( eng - eng_start) > 0.01: 
       print("Energy changed too much during TDCI: {} -> {}".format(eng_start, eng))
-      return False
+      return "ENERGY_CHANGE"
 
 
     if os.path.exists(self.dir+"gradinit.bin"):

@@ -113,7 +113,11 @@ class Ehrenfest:
       #utils.h5py_update({'atoms': self.atoms})
 
       if self.tc.config.WIGNER_PERTURB: # Perturb according to wigner distribution
-        TCdata = self.tc.hessian(x*bohrtoangs, self.tc.config.WIGNER_TEMP )
+        TCdata = None
+        if self.tc.config.HESSIAN_FILE is None:
+          TCdata = self.tc.hessian(x*bohrtoangs, self.tc.config.WIGNER_TEMP )
+        else:
+          TCdata = utils.read_hessfile(len(x), self.tc.config.HESSIAN_FILE )
         x, v_timestep = utils.initial_wigner( self.tc.config.WIGNER_SEED,
                                               x, TCdata["hessian"], self.masses,
                                               self.tc.config.WIGNER_TEMP ) 

@@ -1,5 +1,5 @@
 
-import os, sys, shutil, time
+import os, sys, shutil, struct, time
 import numpy as np
 import h5py
 import subprocess
@@ -54,6 +54,26 @@ def xyz_read(filename):
     coords[i][2] = float(fields[3])
   f.close()
   return (atoms, coords)
+
+
+def read_hessfile(natoms, filepath):
+  # 2*sizeof(int)+sizeof(double)+natoms*sizeof(double4);
+  nbytes = 2*4+8+(natoms)*(4*8)
+  f = open(filepath, 'rb')
+  #print(len(f.read()))
+  #f.seek(0)
+  first = f.read(nbytes)
+  second = f.read(((3*natoms)**2)*8)
+  third = f.read((3*3*natoms)*8)
+  rest = f.read()
+  if len(rest) != 0:
+    print("ERROR: Extra bytes in Hessian.bin, something isn't right...")
+  #print( (len(first),len(second),len(third),len(rest)))
+  hessian = np.array(struct.unpack('d'*((3*natoms)**2), second))
+  hessian.resize((3*natoms,3*natoms))
+  size = 3 # if RunPolarizability in TC, this should be 12. Not sure if we ever need that.
+  dipolederiv = np.array(struct.unpack('d'*(size*3*natoms), third))
+  return {"hessian": hessian, "dipolederiv": dipolederiv}
 
 
 
@@ -358,7 +378,8 @@ def h5py_copy_partial(oldh5f, lastframe, config):
                        'cp '+prevjob_dir+"ImCn_end.bin "+newjob_dir+"/imcn_init.bin ;"+
                        'cp '+prevjob_dir+"field0.bin "+newjob_dir+"/field0.bin ;"+
                        'cp '+newjob_old+"temp.xyz "+newjob_dir+"/temp.xyz ;"+
-                       'cp '+newjob_old+"test"+new_N+".in "+newjob_dir+"/test"+new_N+".in ;", shell=True)
+                       #'cp '+newjob_old+"test"+new_N+".in "+newjob_dir+"/test"+new_N+".in ;", shell=True)
+                       'cp '+newjob_old+"tc.in "+newjob_dir+"/tc.in ;", shell=True)
   p.wait()
 
   # Copy all previous jobs so electronic/ contains the full simulation
@@ -480,6 +501,11 @@ class ConfigHandler:
       self.WIGNER_PERTURB = config.WIGNER_PERTURB
       self.WIGNER_TEMP = config.WIGNER_TEMP
       self.WIGNER_SEED = config.WIGNER_SEED
+    except: pass
+
+    self.HESSIAN_FILE = None
+    try:
+      self.HESSIAN_FILE = config.HESSIAN_FILE
     except: pass
 
     self.atoms, self.xyz = xyz_read(config.xyzpath)
