@@ -29,7 +29,7 @@ HESSIAN_FILE = None
 # TDCI TeraChem Template
 ########################################
 
-TIMESTEP_E_AS = 1.0           # Electronic timestep in attoseconds
+TIMESTEP_E_AS = 0.10           # Electronic timestep in attoseconds
 nfields = 1              # number of distinct fields (generally for multichromatic floquet)
 krylov_end = False       # Generate approximate eigenstates at end of calculation?
 krylov_end_n = 5         # Number of steps to save wfn on to generate approx eigenstates with.

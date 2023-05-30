@@ -3,7 +3,7 @@
 
 from __future__ import print_function
 import numpy as np
-import struct, shutil, os, sys, subprocess, time
+import struct, shutil, os, sys, subprocess, time, mmap
 import copy
 
 
