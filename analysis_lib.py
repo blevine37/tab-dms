@@ -140,11 +140,7 @@ rms = lambda x_seq: (sum(x*x for x in x_seq)/len(x_seq))**(1/2)
 #
 # TODO: Rewrite this so that we always use the explicit time-stamp and directory
 #           labeled by hdf5 in case of half-steps midway through.
-#       Technically, half-steps would only be used if we did the FOMO FIX method of
-#         skipping a gradient at a problematic xyz... but afaik that code is bugged
-#         do we care about fixing it? (AD: 3/15/2023)
 # TODO: make sure terachem's States_Cn.bin includes higher spin states and that their order makes sense
-
 
 
 # This class makes a bunch of arrays you can plot.
@@ -162,6 +158,8 @@ rms = lambda x_seq: (sum(x*x for x in x_seq)/len(x_seq))**(1/2)
 #     self.S_sq_actidiag - Orbital norm unchanged in rotation
 #     self.S_sq_actioffdiag - Orbital norm rotating within active space
 #     self.S_sq_actisum  - Total norm in active space (should be equal to norbitals)
+#     self.state_eng     - Dictionary. state_engs[i] is an array of the energy of stationary
+#                            state i at each timestep in Hartree.
 #     self.state_proj    - Requires DoStateProjections=True. Dictionary. state_proj[i] has 
 #                           the projection of the wfn onto the i'th state at each step.
 #                           provided that the i'th state was calculated by terachem.
@@ -251,6 +249,29 @@ class plottables:
     runtime = "get_state_projections runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
     return state_proj
+
+  def get_state_energies(self):
+    start = time.time()
+    state_eng = {}
+    for state in range(0, self.nstates):
+      state_eng[state] = []
+    for i in range(1,self.nstep-2):
+      dt = self.d+"electronic/"+str(i)+"/"
+      # Ugh lines look like this so i can't use scan_outfile
+      # Singlet state  3 energy:       -230.37405066588269
+      f = open(dt+"tc.out", "r")
+      for line in f:
+        if len(line.split()) != 5:
+          continue # NEXT LINE
+        if line.split()[0:2] != ["Singlet", "state"]:
+          continue # NEXT LINE
+        if line.split()[3] == "energy:":
+          eng = float(line.split()[4])
+          state = int(line.split()[2])-1
+          state_eng[state].append(eng)
+    runtime = "get_state_engs runtime: {:10.6f} seconds".format(time.time() - start)
+    print(runtime);sys.stdout.flush()
+    return state_eng
 
     
   def get_S_diagnostics(self):
@@ -359,6 +380,7 @@ class plottables:
     self.get_h5data()
     self.init_params()
     self.make_xyz_series()
+    self.state_eng = self.get_state_energies()
     if DoSDiagnostic: self.get_S_diagnostics() # sets self.S_sq_*, where *: oos, actidiag, actioffdiag, actisum
     if self.DoFOMO: self.get_fomodata() # sets self.fomo_eng and self.fomo_occ dictionaries
     if self.DoGradStates: self.rmsgrad_state = self.get_state_grads()     
