@@ -605,6 +605,11 @@ class job:
     states = read_bin_array(self.dir+"States_Cn.bin", nstates*self.ndets)
     states.resize((nstates, self.ndets))
     states_eng = read_bin_array(self.dir+"States_E.bin", nstates)
+    #read forces
+    forces=[]
+    for i in range(nstates):
+        f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
+	forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
     return { "grad"       : grad,
              "eng"        : E,
              "states"     : states,
@@ -612,7 +617,8 @@ class job:
              "recn" : self.ReCn,
              "imcn" : self.ImCn,
              "tdci_dir": self.dir,
-             "error": None
+             "error": None,
+             "forces": forces
            }
 
 
@@ -880,7 +886,7 @@ class tccontroller:
       if key in grad_template: del grad_template[key]
     j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER)
     j.gradjob = True
-    j.dir = self.JOBDIR+"electronic/grad/"
+    j.dir = self.JOBDIR+"electronic/"+str(self.N)+"_grad/"
     self.prevjob = j
     return j.run_safely()
 
