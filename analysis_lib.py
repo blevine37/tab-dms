@@ -8,6 +8,7 @@ import os, time, shutil, subprocess
 import copy
 import h5py
 import matplotlib
+matplotlib.use("Agg")
 
 
 import matplotlib.pyplot as plt
@@ -322,19 +323,22 @@ class plottables:
     p.wait()
     time.sleep(1)
     h = h5py.File(d+"data_read.hdf5", 'r')
-    self.nstep = nstep = len(h['time'][1:])
-    p = h['pe'][1:]
-    k = h['ke'][1:]
+    self.nstep = nstep = len(h['time'])
+    if self.maxsteps <= nstep: # Cut down time scraping data...
+      self.nstep = self.maxsteps
+      nstep = self.maxsteps
+    p = h['pe'][1:nstep]
+    k = h['ke'][1:nstep]
     self.tot = np.array(p)+np.array(k)
     totmin = min(self.tot[2:nstep])
     self.reltot = [(z-totmin)*27.2114 for z in self.tot]
-    self.time = np.array(h['time'][1:])/1000. # in fs
+    self.time = np.array(h['time'][1:nstep])/1000. # in fs
     self.steptime = (h['time'][3] - h['time'][2])/1000. # in fs
     self.diff = [0.0]
     for i in range(1,len(self.reltot)):
       self.diff.append(abs(self.reltot[i-1]-self.reltot[i]))
-    self.pe = 27.2114*np.array(h['pe'][1:])
-    self.ke = 27.2114*np.array(h['ke'][1:])
+    self.pe = 27.2114*np.array(h['pe'][1:nstep])
+    self.ke = 27.2114*np.array(h['ke'][1:nstep])
     h.close()
     runtime = "get_h5data runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
@@ -370,9 +374,10 @@ class plottables:
     print(runtime);sys.stdout.flush()
     return rmsgrad
 
-  def __init__(self, d, label, DoStateProjections=False, DoSDiagnostic=True):
+  def __init__(self, d, label, DoStateProjections=False, DoSDiagnostic=True, maxsteps=None):
     start_ = time.time()
     self.label = label
+    self.maxsteps = maxsteps
     self.filelabel = self.label.replace("/","_").replace(" ","_")
     self.d = d
     self.DoStateProjections = DoStateProjections
