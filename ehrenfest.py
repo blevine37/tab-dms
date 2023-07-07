@@ -152,12 +152,14 @@ class Ehrenfest:
   # 
   def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
     realtime_start = time.time()  # For benchmarking
-    it = 0
     t = t_init
+    it = int(t_init/(self.delta*autimetosec*1e+18))
+    self.logprint("Starting at time "+str(t)+" as, step "+str(it))
+    self.logprint("Running until time "+str(self.tc.config.DURATION*1000)+" as, "+str(self.tc.config.MAXITERS)+" steps")
     x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
     a = 0.0 # initial acceleration is not used
     TCdata = None
-    while it < self.tc.config.MAXITERS: # go forever! :D
+    while it < self.tc.config.MAXITERS: # main loop!
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
       x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
