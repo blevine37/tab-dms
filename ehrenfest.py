@@ -110,6 +110,7 @@ class Ehrenfest:
       self.atoms, x = utils.xyz_read(geomfilename) # x in angstroms initially
       x = x / bohrtoangs # cast Initial geometry to Bohr
       self.masses = utils.getmasses(self.atoms)
+      v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
       #utils.h5py_update({'atoms': self.atoms})
 
       if self.tc.config.WIGNER_PERTURB: # Perturb according to wigner distribution
@@ -132,7 +133,6 @@ class Ehrenfest:
       t = 0.0
       recn = gradout["states"][self.tc.config.initial_electronic_state]
       imcn = np.zeros(len(recn))
-      v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
 
 
       a = np.zeros([len(self.atoms), 3]) # Accel at t=0

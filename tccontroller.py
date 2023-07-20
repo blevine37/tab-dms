@@ -649,12 +649,12 @@ class job:
       self.readmisc()
     
     # Format output structure
-    # How should we control this when we have an external field?
     eng_start = float(self.scan_outfile(["Initial", "energy:"], 2))
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
-    if np.abs( eng - eng_start) > 0.01: 
-      print("Energy changed too much during TDCI: {} -> {}".format(eng_start, eng))
-      return "ENERGY_CHANGE"
+    # How should we control this when we have an external field?
+    #if np.abs( eng - eng_start) > 0.01: 
+    #  print("Energy changed too much during TDCI: {} -> {}".format(eng_start, eng))
+    #  return "ENERGY_CHANGE"
 
 
     if os.path.exists(self.dir+"gradinit.bin"):

@@ -6,9 +6,8 @@ xyzpath = "benzene_perturbed.xyz"
 initial_electronic_state = 0  # S0 = 0, S1 = 1, etc.
 
 RESTART = False
-restart_frame = 62
+restart_frame = True  # True automatically detects last valid step
 restart_hdf5 = "restart.hdf5"
-SCHEDULER = False
 TERACHEM = "/home/adurden/terachem/build/bin/" # directory containing terachem executable
 
 
@@ -21,7 +20,7 @@ WIGNER_PERTURB = True   # Perturb the initial position and velocity based on Wig
 WIGNER_TEMP = 0.0       # Temperature for Wigner distribution
 import random
 WIGNER_SEED = random.randint(0, 2**32-1)     # Random seed for Wigner distribution sampling
-# If you already ran a Hessian calculation, you can include the path to the Hessian.dat to skip the freq calculation
+# If you already ran a Hessian calculation, you can include the path to the Hessian.bin to skip the freq calculation
 HESSIAN_FILE = None
 
 
@@ -119,7 +118,7 @@ def f0_values(t):
   E_strength_Wm2 = 2.5E+16 # In W/m^2
   E_str = (np.sqrt(2.0*E_strength_Wm2 / EPSILON_C) )/E_FIELD_AU  # transform to au field units
   # Continuous field for Rabi flop
-  # S0 <-> S1 gap at S0 geom:  0.28229097  7.68152679 eV
+  # S0 <-> S1 gap at S0 geom:  0.28229097 au, 7.68152679 eV
   # S0 <-> S1 gap at S1 geom:  0.26018939 au, 7.08011240 eV
   # Need a range of frequencies to account for the changing gap
   field_au = np.linspace(0.26018939, 0.28229097, 50)
@@ -136,10 +135,10 @@ def f0_values(t):
 # Job Template: Used to make a shell script that executes terachem 
 #   make sure you include temppath and tempname in your job template!
 #   those keywords are search and replaced
-job_template_contents = "#!/bin/bash\n"+
-                        "source /home/adurden/.bashrc\n"+
-                        "cd temppath\n"+
-                        TERACHEM+"terachem tempname.in > tempname.out\n"
+job_template_contents = "#!/bin/bash\n\
+source /home/adurden/.bashrc\n\
+cd temppath\n\
+"+TERACHEM+"terachem tempname.in > tempname.out\n"
 
 
 

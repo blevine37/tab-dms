@@ -270,6 +270,7 @@ class plottables:
           eng = float(line.split()[4])
           state = int(line.split()[2])-1
           state_eng[state].append(eng)
+      state_eng[state] = np.array(state_eng[state])
     runtime = "get_state_engs runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
     return state_eng
@@ -408,9 +409,9 @@ class plottables:
     return startt, endt
 
   def make_xyz_series(self):
-    print("Making "+self.filelabel+".xyz...")
+    print("Making "+self.d+self.filelabel+".xyz...")
     start = time.time()
-    g = open(self.filelabel+".xyz", 'w')
+    g = open(self.d+"/"+self.filelabel+".xyz", 'w')
     for i in range(1,self.nstep):
       outstring = ""
       dt = self.d+"electronic/"+str(i)+"/"
