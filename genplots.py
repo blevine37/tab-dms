@@ -265,7 +265,6 @@ def make_xyz_series(nsteps):
 
 # VMD, ffmpeg
 def render_trajectory(nsteps):
-  print("Rendering trajectory to mp4...")
   # Clean directories
   if os.path.exists("xyzs/"):
     shutil.rmtree("xyzs/")
@@ -279,8 +278,9 @@ def render_trajectory(nsteps):
     os.makedirs("bmp/")
 
   # copy xyz files to directory
+  print("Preparing xyz files...")
   j = 0
-  for i in range(0,nsteps,2):
+  for i in range(2,nsteps,5):
     shutil.copy("electronic/"+str(i)+"/temp.xyz", "xyzs/"+"{:04d}".format(j)+".xyz")
     j+=1
 
@@ -297,7 +297,8 @@ def render_trajectory(nsteps):
 	    "mol default style CPK\n"+\
 	    "mol new ./xyzs/$name.xyz\n"+\
 	    "scale to 0.45\n"+\
-	    "rotate y by 0.00000\n"+\
+	    "rotate x by 50.0000\n"+\
+	    "rotate z by 50.0000\n"+\
 	    "translate by 0.000000 0.00000 0.000000\n"+\
 	    "mol modstyle 0 top CPK 0.500000 0.300000 50.000000 50.000000\n"+\
 	    "mol modcolor 0 top Element\n"+\
@@ -317,11 +318,13 @@ def render_trajectory(nsteps):
   f.write(vmdtxt)
   f.close()
   # render xyz's into bmps
+  print("Rendering xyz to bmp...")
   vmdp = subprocess.Popen("vmd -dispdev text -eofexit < vmd.tcl > output.log", shell=True)
   vmd_endcode = vmdp.wait()
   print("vmd endcode: "+str(vmd_endcode))
   # render bmps into an mp4
-  ffmpegp = subprocess.Popen("ffmpeg -y -r 20 -i bmp/%04d.bmp -c:v libx264 -preset slow -crf 18 "+
+  print("Rendering mp4...")
+  ffmpegp = subprocess.Popen("ffmpeg -y -r 60 -i bmp/%04d.bmp -c:v libx264 -preset slow -crf 18 "+
                              " -force_key_frames source -x264-params keyint=4:scenecut=0 -pix_fmt yuv420p trajectory.mp4", shell=True)
   ffmpeg_endcode = ffmpegp.wait()
   print("ffmpeg endcode: "+str(ffmpeg_endcode))
@@ -336,7 +339,7 @@ def ffmpeg_4panel(nsteps):
   if os.path.exists("render1/"):
     shutil.rmtree("render1/")
     os.makedirs("render1/")
-  for i in range(0,nsteps):
+  for i in range(1,nsteps):
     s = "{:04d}".format(i)
     composite_p = subprocess.Popen('ffmpeg -i ediff_plots/Egap'+s+".png -i peke_plots/peke"+s+".png -i bmp/"+s+".bmp -i pop_plots/Pop"+s+'.png -lavfi "xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0" '+s+'.jpg')
 
@@ -561,26 +564,27 @@ def h2o_bond(steptime):
   
     
   
-
+"""
 h5f = h5py.File('data2.hdf5', 'r')
 #import pdb; pdb.set_trace()
 steptime = h5f['time'][1] - h5f['time'][0]
 h5f.close()
 print("Steptime: "+str(steptime))
+"""
 
 #steptime= 241.8/2 # delta * autimetosec * 10+18, attoseconds
-nsteps = len(os.listdir("electronic/"))-2 # grad folder + last one might not have finished if you killed the job
+nsteps = len(os.listdir("electronic/"))-4 # grad folder + last one might not have finished if you killed the job
 nstates = 3
 print("nsteps: "+str(nsteps))
 
-X, poten, kinen, tot = h5py_plot(steptime)
+#X, poten, kinen, tot = h5py_plot(steptime)
 
-make_xyz_series(nsteps)
-h2o_bond(steptime)
+#make_xyz_series(nsteps)
+#h2o_bond(steptime)
 
-energies_postdiab = plot_state_energies(nstates, nsteps,steptime)
-pops = get_populations(nstates,nsteps)
-plot_populations(nstates,nsteps,steptime,pops)
+#energies_postdiab = plot_state_energies(nstates, nsteps,steptime)
+#pops = get_populations(nstates,nsteps)
+#plot_populations(nstates,nsteps,steptime,pops)
 
 
 
@@ -591,7 +595,7 @@ render_trajectory(nsteps)
 #plot_populations_animate(nstates, nsteps, steptime, pops)
 #pot_ke_animation(X,poten,kinen)
 
-rgbs = rgb_linspace(nstates)
+#rgbs = rgb_linspace(nstates)
 
 #EDiffPlot_Animation(X, energies_postdiab, rgbs)
 

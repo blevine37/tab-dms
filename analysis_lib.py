@@ -270,7 +270,6 @@ class plottables:
           eng = float(line.split()[4])
           state = int(line.split()[2])-1
           state_eng[state].append(eng)
-      state_eng[state] = np.array(state_eng[state])
     runtime = "get_state_engs runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
     return state_eng

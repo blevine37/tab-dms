@@ -17,6 +17,8 @@ AUT2AS = 24.188843265857 # Atomic unit of time to Attoseconds
 
 # Need to make sure hdf5 and job directories from previous runs don't get in the way
 def clean_files(jobdir):
+  if (not (os.path.exists(jobdir+"electronic") or os.path.exists(jobdir+"data.hdf5"))):
+    return
   if os.path.exists(jobdir+"oldrun/"):
     shutil.rmtree(jobdir+"oldrun/")
   os.makedirs(jobdir+"oldrun/")
@@ -536,6 +538,7 @@ class ConfigHandler:
     TDCI_TEMPLATE["tdci_krylov_end_interval"] = self.krylov_end_interval
     # Options that tccontroller may remove on initial step
     TDCI_TEMPLATE["tdci_diabatize_orbs"]  = "yes"
+    TDCI_TEMPLATE["tdci_write_binfiles"]  = "yes"
     TDCI_TEMPLATE["tdci_recn_readfile"]   = "recn_init.bin"
     TDCI_TEMPLATE["tdci_imcn_readfile"]  = "imcn_init.bin"
     TDCI_TEMPLATE["tdci_prevorbs_readfile"] = "PrevC.bin"

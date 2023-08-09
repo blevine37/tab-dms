@@ -21,21 +21,30 @@ plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
 plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
+maxstep = 5166
 
 datas_process = [
-#plottables( "/home/adurden/conda/ethylene/fomo_benfix2_read/", "benfix2", DoStateProjections=True, DoSDiagnostic=True ),
-#plottables( "/home/adurden/conda/ethylene/engtest2/", "engtest", DoStateProjections=False, DoSDiagnostic=False ),
-#plottables( "/home/adurden/conda/ethylene/engtest4/", "fix", DoStateProjections=False, DoSDiagnostic=False ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/1/", "1", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/2/", "2", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/3/", "3", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/4/", "4", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/5/", "5", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/6/", "6", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/7/", "7", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/8/", "8", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/9/", "9", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
-plottables( "/home/adurden/jobs/seawulf_jobs/benzene/10/", "10", DoStateProjections=True, DoSDiagnostic=True, maxsteps=10000 ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/1/", "1", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/2/", "2", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/3/", "3", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/4/", "4", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/5/", "5", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/6/", "6", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/7/", "7", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/8/", "8", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/9/", "9", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/10/", "10", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/11/", "11", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/12/", "12", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/13/", "13", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/14/", "14", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/15/", "15", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/16/", "16", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/17/", "17", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/18/", "18", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/19/", "19", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/20/", "20", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
+#plottables( "/home/adurden/4tb/seawulf_jobs/benzene_300K2/21/", "21", DoStateProjections=True, DoSDiagnostic=True, maxsteps=maxstep ),
 ]
 
 
@@ -58,44 +67,66 @@ print(datas_process[0].fs2index_range(240,250))
 def plot_traj(data, outname):
   plt.clf()
   fig = plt.figure()
-  fig.set_figheight(12)
-  fig.set_figwidth(16)
-  ax1 = fig.add_subplot(511)
-  ax4 = fig.add_subplot(512)
-  ax7 = fig.add_subplot(513)
-  ax8 = fig.add_subplot(514)
-  ax9 = fig.add_subplot(515)
-  ax1.title.set_text('Total Energy')
-  ax1.plot(data.time[data.starti:data.endi], data.reltot[data.starti:data.endi], 'o', markersize=1, label=data.label)
-  ax1.legend()
+  fig.set_figheight(14)
+  fig.set_figwidth(8)
+  ax1 = fig.add_subplot(611)
+  ax2 = fig.add_subplot(612)
+  ax3 = fig.add_subplot(613)
+  ax4 = fig.add_subplot(614)
+  ax5 = fig.add_subplot(615)
+  ax6 = fig.add_subplot(616)
+
+
+
+  #ax4.title.set_text('RMS gradient')
+  #ax4.plot(data.time[data.starti:data.endi], data.rmsgrad[data.starti:data.endi], '-', label=data.label)
+  ax1.title.set_text('Relative Potential vs Kinetic Energy')
+  # Make PE relative
+  data.pe = np.array(data.pe) - min(data.pe)
+  ax1.plot(data.time[data.starti:data.endi], data.pe[data.starti:data.endi], '-', label='PE')
+  ax1.plot(data.time[data.starti:data.endi], data.ke[data.starti:data.endi], '-', label='KE')
   ax1.set_ylabel("eV")
-
-
-  ax4.title.set_text('RMS gradient')
-  ax4.plot(data.time[data.starti:data.endi], data.rmsgrad[data.starti:data.endi], '-', label=data.label)
 	       
 
-  ax7.title.set_text("FOMO Orbital Energies")
+  ax2.title.set_text("FOMO Orbital Energies")
   if data.DoFOMO:
-    for i in range(data.clsd, data.clsd+data.acti+1):
-      ax7.plot(data.time[data.starti:data.endi], data.fomo_eng[i][data.starti:data.endi], '-', label=str(i))
-      pass
-  ax7.legend()
+    for i in range(data.clsd, data.clsd+data.acti+2): # Include an extra orbital on either side
+      ax2.plot(data.time[data.starti:data.endi], data.fomo_eng[i][data.starti:data.endi], '-', label=str(i))
+  #ax2.legend()
+  ax2.set_ylabel("eV")
 
-  ax9.title.set_text(r"$S^2$ Closed-Active Off-Diagonals")
-  if data.DoSDiagnostic:
-    ax9.plot(data.time[data.starti:data.endi], data.S_sq_oos[data.starti:data.endi], '-', label=data.label)
-  ax9.legend()     
+  ax3.title.set_text("State Energies")
+  min_e = min([min(data.state_eng[i][data.starti:data.endi]) for i in range(0,3)])
+  for i in range(0,3):
+    data.state_eng[i] = 27.2114*(np.array(data.state_eng[i])-min_e) 
+    ax3.plot(data.time[data.starti:data.endi], data.state_eng[i][data.starti:data.endi], '-', label=r'S$_'+str(i)+'$')
+  #ax3.legend()
+  ax3.set_ylabel("eV")
 
-  ax8.title.set_text("State Projections")
+
+  ax4.title.set_text("State Projections")
   if data.DoStateProjections:
     for i in range(0,data.nstates):
-      ax8.plot(data.time[data.starti:data.endi], data.state_proj[i][data.starti:data.endi], '-', label='S'+str(i))
-  ax8.legend()
+      ax4.plot(data.time[data.starti:data.endi], data.state_proj[i][data.starti:data.endi], '-', label=r'S$_'+str(i)+'$')
+  ax4.legend(loc="upper right")
+
+  ax5.title.set_text('Relative Total Energy')
+  shifted_reltot = data.reltot[data.starti:data.endi]-data.reltot[data.starti]
+  #ax5.plot(data.time[data.starti:data.endi], data.reltot[data.starti:data.endi], 'o', markersize=1)
+  ax5.plot(data.time[data.starti:data.endi], shifted_reltot, 'o', markersize=1)
+  #ax5.legend()
+  ax5.set_ylabel("eV")
+
+  ax6.title.set_text(r"$S^2$ Closed-Active Off-Diagonals")
+  if data.DoSDiagnostic:
+    ax6.plot(data.time[data.starti:data.endi], data.S_sq_oos[data.starti:data.endi], '-')
+  #ax6.legend()     
+  ax6.set_xlabel("Time (fs)")
+
 
   matplotlib.use("Agg")
   plt.tight_layout()
-  plt.savefig(outname, dpi=255)
+  plt.savefig(outname, dpi=200)
 
 
 
@@ -188,23 +219,163 @@ def plot_average_statepop(datas, outname):
   plt.savefig(outname, dpi=255)
 
 
-import os, shutil
+import os, shutil, h5py
+from PIL import Image
 
 
-if os.path.isdir("plots"):
-  shutil.rmtree("plots")
+# VMD, ffmpeg
+def render_trajectory(data):
+  """
+  SMALL_SIZE = 8
+  MEDIUM_SIZE = 10
+  BIGGER_SIZE = 12
+  plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+  plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+  plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+  plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+  plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+  plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+  plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+  """
+  d = "./"
+  start = time.time()
+  #d = self.d
+  # Opening a h5py file while the simulation is running will crash it, so create a copy!
+  p = subprocess.Popen('cp "'+d+'data.hdf5" "'+d+'data_read.hdf5"', shell=True)
+  p.wait()
+  time.sleep(1)
+  h = h5py.File(data.d+"data_read.hdf5", 'r')
+  print("data.maxsteps: "+str(data.maxsteps))
+  nstep = min(len(h['time'])-4, data.maxsteps)
+  print("nstep: "+str(nstep))
+  #nstep = 200
+  # Clean directories
+  if os.path.exists("plot_anim/"):
+    shutil.rmtree("plot_anim/")
+    time.sleep(1)
+    os.makedirs("plot_anim/")
+  else:
+    os.makedirs("plot_anim/")
+  if os.path.exists("xyzs/"):
+    shutil.rmtree("xyzs/")
+    time.sleep(1)
+    os.makedirs("xyzs/")
+  else:
+    os.makedirs("xyzs/")
+  if os.path.exists("bmp/"):
+    shutil.rmtree("bmp/")
+    time.sleep(1)
+    os.makedirs("bmp/")
+  else:
+    os.makedirs("bmp/")
 
-os.mkdir("plots")
+  # copy xyz files to directory
+  print("Preparing xyz files...")
+  j = 0
+  for i in range(2,nstep,5):
+    shutil.copy(h["tdci_dir"][i]+"/temp.xyz", "xyzs/"+"{:04d}".format(j)+".xyz")
+    j+=1
+
+  # write VMD script
+  # Keeping the script in here so we can modify camera parameters from python if we want
+  vmdtxt = "# Script from Arshad Mehmood\n"+\
+	    "color Display Background white\n"+\
+	    "display resize 960 960\n"+\
+	    "set isoval 0.25\n"+\
+	    "axes location Off\n"+\
+	    "for {set i 0} {$i<="+str(nstep)+"} {incr i} {\n"+\
+	    "set name [format %04d $i]\n"+\
+	    "puts \"Processing $name.xyz...\"\n"+\
+	    "mol default style CPK\n"+\
+	    "mol new ./xyzs/$name.xyz\n"+\
+	    "scale to 0.45\n"+\
+	    "rotate x by 50.0000\n"+\
+	    "rotate z by 50.0000\n"+\
+	    "translate by 0.000000 0.00000 0.000000\n"+\
+	    "mol modstyle 0 top CPK 0.500000 0.300000 50.000000 50.000000\n"+\
+	    "mol modcolor 0 top Element\n"+\
+	    "color Element C gray\n"+\
+	    "mol addrep top\n"+\
+	    "mol modstyle 1 top Isosurface $isoval 0 0 0 1 1\n"+\
+	    "mol modcolor 1 top ColorID 1\n"+\
+	    "mol modmaterial 1 top AOShiny\n"+\
+	    "material change opacity AOShiny 0.350000\n"+\
+	    "material change transmode AOShiny 1.000000\n"+\
+	    "display cuemode Linear\n"+\
+	    "display cuestart 3.000000\n"+\
+	    "render TachyonInternal bmp/$name.bmp\n"+\
+	    "mol delete top\n"+\
+	    "}"
+  f = open("vmd.tcl", 'w')
+  f.write(vmdtxt)
+  f.close()
+  # render xyz's into bmps
+  print("Rendering xyz to bmp...")
+  vmdp = subprocess.Popen("vmd -dispdev text -eofexit < vmd.tcl > output.log", shell=True)
+  vmd_endcode = vmdp.wait()
+  print("vmd endcode: "+str(vmd_endcode))
+
+  print("Preparing plots...")
+  j = 0
+  for i in range(2,nstep,5):
+    plt.clf()
+    my_dpi = 200
+    fig = plt.figure(figsize=(1000/my_dpi, 1600/my_dpi), dpi=my_dpi)
+    #ax1 = fig.add_subplot(211)
+    ax2 = fig.add_subplot(212)
+    ax2.title.set_text("State Populations")
+    ax2.set_xlabel("Time (fs)")
+    ax2.set_xlim(left=data.time[data.starti], right=data.time[data.endi])
+    for k in range(0,data.nstates):
+      ax2.plot(data.time[data.starti:i], data.state_proj[k][data.starti:i], '-', label=r'$S_{p}$'.format(p=k))
+
+    img = np.asarray(Image.open(d+"bmp/{:04d}.bmp".format(j)))
+    ax1 = fig.add_subplot(211)
+    ax1.axis('off')
+    ax1.imshow(img)
+    
+    ax2.legend(loc="center right")
+    plt.tight_layout()
+    plt.savefig(d+"plot_anim/{:04d}.png".format(j), dpi=my_dpi)
+
+    j+=1
+
+
+  # render bmps into an mp4
+  print("Rendering mp4...")
+  ffmpegp = subprocess.Popen("ffmpeg -y -r 60 -i plot_anim/%04d.png -c:v libx264 -preset slow -crf 24 "+
+                             " -force_key_frames source -x264-params keyint=4:scenecut=0 -pix_fmt yuv420p "+data.filelabel+".mp4", shell=True)
+  ffmpeg_endcode = ffmpegp.wait()
+  print("ffmpeg endcode: "+str(ffmpeg_endcode))
+  # clean up files
+  os.remove("vmd.tcl")
+  shutil.rmtree("bmp/")
+  shutil.rmtree("xyzs/")
+  return 0
+
+
+"""
+outdir = "plots_300K2/"
+
+if os.path.isdir(outdir):
+  shutil.rmtree(outdir)
+
+os.mkdir(outdir)
+
+
+
+
 
 for data in datas_process:
   print("Starting "+data.filelabel)
-  plot_traj(data, "plots/"+data.filelabel+"_traj.png")
-  plot_ci_rmsd(data, "plots/"+data.filelabel+"_cirmsd.png")
+  plot_traj(data, outdir+data.filelabel+"_traj.png")
+  plot_ci_rmsd(data, outdir+data.filelabel+"_cirmsd.png")
 
 print("Starting avg_pop.png")
-plot_average_statepop(datas_process, "plots/avg_pop.png")
+plot_average_statepop(datas_process, outdir+"avg_pop.png")
+"""
 
-
+render_trajectory(datas_process[0])
 
 
 
