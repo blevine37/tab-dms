@@ -222,7 +222,10 @@ class TAB(Ehrenfest):
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
       
-      gradout_int = self.tc.grad(x*bohrtoangs, ReCn, ImCn)
+      if it == 0:
+          gradout_int = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True)
+      else:         #reuse the data from end call
+          gradout_int = gradout
       ######store the old population to get its derivatives   ##everything before propagation gradout_int
       states = gradout_int["states"]
       ReCn, ImCn = gradout_int["recn"], gradout_int["imcn"]
@@ -241,7 +244,7 @@ class TAB(Ehrenfest):
       #TAB Gegins here - history based correction###########
       ######################################################
 
-      gradout_mid = self.tc.grad(x*bohrtoangs, ReCn, ImCn)        ###everthing after progpagation before collapsing gradout_mid
+      gradout_mid = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True)        ###everthing after progpagation before collapsing gradout_mid
       ReCn, ImCn = gradout_mid["recn"], gradout_mid["imcn"]
       states = gradout_mid["states"]
       newpop = (np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2
@@ -312,7 +315,7 @@ class TAB(Ehrenfest):
       ImCn = nct.imag
      
       ##-----------Resclaing the Momentum to conseve total energy)----------#
-      gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn)
+      gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=True) 
       newpote = gradout["eng"]
       
       if (newpote > oldpote+oldkine):

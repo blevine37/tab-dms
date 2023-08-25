@@ -606,9 +606,10 @@ class job:
     states_eng = read_bin_array(self.dir+"States_E.bin", nstates)
     #read forces
     forces=[]
-    for i in range(nstates):
-        f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
-	forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
+    if str(self.scan_outfile(["tdci_grad_states"], 1)) == "yes":
+        for i in range(nstates):
+            f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
+	    forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
     return { "grad"       : grad,
              "eng"        : E,
              "states"     : states,
@@ -868,7 +869,7 @@ class tccontroller:
     self.jobs.append(prevjob)
     return prevjob.N
 
-  def grad(self, xyz, ReCn=None, ImCn=None):
+  def grad(self, xyz, ReCn=None, ImCn=None, DoGradStates=False):
     grad_template = copy.deepcopy(self.TDCI_TEMPLATE)
     # overwrite template to do gradient stuff instead of tdci
     grad_template["tdci_grad_init"] = "yes"
@@ -879,6 +880,8 @@ class tccontroller:
     grad_template["tdci_nstep"] = "1"
     grad_template["tdci_krylov_end"] = "no"
     grad_template["tdci_diabatize_orbs"] = "no"
+    if DoGradStates:
+        grad_template["tdci_grad_states"] = "yes"
     remove_keys = ["tdci_fieldfile0", "tdci_fieldfile1", "tdci_fieldfile2", 
                    "tdci_prevorbs_readfile", "tdci_prevcoords_readfile", "tdci_krylov_init"]
     for key in remove_keys:

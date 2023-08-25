@@ -45,7 +45,7 @@ if os.path.abspath(config.JOBDIR)+"/inputfile.py" != infile:
 
 tc = tccontroller.tccontroller(config, logger=l)
 
-ehrenfest_ = ehrenfest.Ehrenfest(config.TIMESTEP_AU, logprint, tc)
+ehrenfest_ = ehrenfest.TAB(config.TIMESTEP_AU, logprint, tc)
 
 
 
