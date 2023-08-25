@@ -8,6 +8,7 @@ import os, time, shutil, subprocess
 import copy
 import h5py
 import matplotlib
+matplotlib.use("Agg")
 
 
 import matplotlib.pyplot as plt
@@ -140,11 +141,7 @@ rms = lambda x_seq: (sum(x*x for x in x_seq)/len(x_seq))**(1/2)
 #
 # TODO: Rewrite this so that we always use the explicit time-stamp and directory
 #           labeled by hdf5 in case of half-steps midway through.
-#       Technically, half-steps would only be used if we did the FOMO FIX method of
-#         skipping a gradient at a problematic xyz... but afaik that code is bugged
-#         do we care about fixing it? (AD: 3/15/2023)
 # TODO: make sure terachem's States_Cn.bin includes higher spin states and that their order makes sense
-
 
 
 # This class makes a bunch of arrays you can plot.
@@ -162,6 +159,8 @@ rms = lambda x_seq: (sum(x*x for x in x_seq)/len(x_seq))**(1/2)
 #     self.S_sq_actidiag - Orbital norm unchanged in rotation
 #     self.S_sq_actioffdiag - Orbital norm rotating within active space
 #     self.S_sq_actisum  - Total norm in active space (should be equal to norbitals)
+#     self.state_eng     - Dictionary. state_engs[i] is an array of the energy of stationary
+#                            state i at each timestep in Hartree.
 #     self.state_proj    - Requires DoStateProjections=True. Dictionary. state_proj[i] has 
 #                           the projection of the wfn onto the i'th state at each step.
 #                           provided that the i'th state was calculated by terachem.
@@ -252,6 +251,29 @@ class plottables:
     print(runtime);sys.stdout.flush()
     return state_proj
 
+  def get_state_energies(self):
+    start = time.time()
+    state_eng = {}
+    for state in range(0, self.nstates):
+      state_eng[state] = []
+    for i in range(1,self.nstep-2):
+      dt = self.d+"electronic/"+str(i)+"/"
+      # Ugh lines look like this so i can't use scan_outfile
+      # Singlet state  3 energy:       -230.37405066588269
+      f = open(dt+"tc.out", "r")
+      for line in f:
+        if len(line.split()) != 5:
+          continue # NEXT LINE
+        if line.split()[0:2] != ["Singlet", "state"]:
+          continue # NEXT LINE
+        if line.split()[3] == "energy:":
+          eng = float(line.split()[4])
+          state = int(line.split()[2])-1
+          state_eng[state].append(eng)
+    runtime = "get_state_engs runtime: {:10.6f} seconds".format(time.time() - start)
+    print(runtime);sys.stdout.flush()
+    return state_eng
+
     
   def get_S_diagnostics(self):
     start = time.time()
@@ -301,19 +323,22 @@ class plottables:
     p.wait()
     time.sleep(1)
     h = h5py.File(d+"data_read.hdf5", 'r')
-    self.nstep = nstep = len(h['time'][1:])
-    p = h['pe'][1:]
-    k = h['ke'][1:]
+    self.nstep = nstep = len(h['time'])
+    if self.maxsteps <= nstep: # Cut down time scraping data...
+      self.nstep = self.maxsteps
+      nstep = self.maxsteps
+    p = h['pe'][1:nstep]
+    k = h['ke'][1:nstep]
     self.tot = np.array(p)+np.array(k)
     totmin = min(self.tot[2:nstep])
     self.reltot = [(z-totmin)*27.2114 for z in self.tot]
-    self.time = np.array(h['time'][1:])/1000. # in fs
+    self.time = np.array(h['time'][1:nstep])/1000. # in fs
     self.steptime = (h['time'][3] - h['time'][2])/1000. # in fs
     self.diff = [0.0]
     for i in range(1,len(self.reltot)):
       self.diff.append(abs(self.reltot[i-1]-self.reltot[i]))
-    self.pe = 27.2114*np.array(h['pe'][1:])
-    self.ke = 27.2114*np.array(h['ke'][1:])
+    self.pe = 27.2114*np.array(h['pe'][1:nstep])
+    self.ke = 27.2114*np.array(h['ke'][1:nstep])
     h.close()
     runtime = "get_h5data runtime: {:10.6f} seconds".format(time.time() - start)
     print(runtime);sys.stdout.flush()
@@ -349,9 +374,10 @@ class plottables:
     print(runtime);sys.stdout.flush()
     return rmsgrad
 
-  def __init__(self, d, label, DoStateProjections=False, DoSDiagnostic=True):
+  def __init__(self, d, label, DoStateProjections=False, DoSDiagnostic=True, maxsteps=None):
     start_ = time.time()
     self.label = label
+    self.maxsteps = maxsteps
     self.filelabel = self.label.replace("/","_").replace(" ","_")
     self.d = d
     self.DoStateProjections = DoStateProjections
@@ -359,6 +385,7 @@ class plottables:
     self.get_h5data()
     self.init_params()
     self.make_xyz_series()
+    self.state_eng = self.get_state_energies()
     if DoSDiagnostic: self.get_S_diagnostics() # sets self.S_sq_*, where *: oos, actidiag, actioffdiag, actisum
     if self.DoFOMO: self.get_fomodata() # sets self.fomo_eng and self.fomo_occ dictionaries
     if self.DoGradStates: self.rmsgrad_state = self.get_state_grads()     
@@ -381,9 +408,9 @@ class plottables:
     return startt, endt
 
   def make_xyz_series(self):
-    print("Making "+self.filelabel+".xyz...")
+    print("Making "+self.d+self.filelabel+".xyz...")
     start = time.time()
-    g = open(self.filelabel+".xyz", 'w')
+    g = open(self.d+"/"+self.filelabel+".xyz", 'w')
     for i in range(1,self.nstep):
       outstring = ""
       dt = self.d+"electronic/"+str(i)+"/"

@@ -17,6 +17,8 @@ AUT2AS = 24.188843265857 # Atomic unit of time to Attoseconds
 
 # Need to make sure hdf5 and job directories from previous runs don't get in the way
 def clean_files(jobdir):
+  if (not (os.path.exists(jobdir+"electronic") or os.path.exists(jobdir+"data.hdf5"))):
+    return
   if os.path.exists(jobdir+"oldrun/"):
     shutil.rmtree(jobdir+"oldrun/")
   os.makedirs(jobdir+"oldrun/")
@@ -24,6 +26,35 @@ def clean_files(jobdir):
     shutil.move(jobdir+"electronic", jobdir+"oldrun/electronic")
   if os.path.exists(jobdir+"data.hdf5"):
     shutil.move(jobdir+"data.hdf5", jobdir+"oldrun/data.hdf5")
+
+
+# make sure filename is clear to write without losing existing files
+# if the folder contains foo, foo.1, foo.2
+# makes the following renames: foo.2 -> foo.3, foo.1 -> foo.2, foo -> foo.1
+# (deletes after maxrotate)
+def rotate_file(filename, maxrotate=10):
+  if not os.path.exists(filename):
+    return None
+  # 'dotted' means ended with a rotation dot, i.e. foo.1 instead of foo
+  already_dotted = False
+  if len(filename.split('.')) > 1:
+    # apparently .isnumeric only works on unicode in py2.7
+    if unicode(filename.split('.')[-1]).isnumeric():
+      already_dotted = True
+  newname = filename+'.1' # If not dotted
+  if already_dotted: # Overwrite if already dotted
+    newname = filename.split('.')
+    newname[-1] = str(int(newname[-1])+1)
+    newname = '.'.join(newname)
+
+  if os.path.exists(newname):
+    if int(newname.split('.')[-1]) >= maxrotate:
+      p = subprocess.Popen('rm -rf '+newname, shell=True)
+      p.wait()
+    rotate_file(newname, maxrotate)
+  p = subprocess.Popen('mv '+filename+' '+newname, shell=True)
+  p.wait()
+  return None
 
 
 
@@ -114,7 +145,7 @@ def initial_wigner(iseed, x, hessian, masses, temp=0.0):
   Works at finite temperature if a temp parameter is passed
   If temp is not provided temp = 0 is assumed"""
 
-  print "## randomly selecting Wigner initial conditions at T=", temp
+  print( "## randomly selecting Wigner initial conditions at T="+str(temp))
   #ndims = self.get_numdims()
   ndims = 3*len(masses)
   #h5f = h5py.File('hessian.hdf5', 'r')
@@ -149,19 +180,19 @@ def initial_wigner(iseed, x, hessian, masses, temp=0.0):
   evals = evals[idx]
   modes = modes[:, idx]
 
-  print '# eigenvalues of the mass-weighted hessian are (a.u.)'
-  print evals
+  print('# eigenvalues of the mass-weighted hessian are (a.u.)')
+  print(evals)
 
   # Checking if frequencies make sense
   freq_cm = np.sqrt(evals[0:ndims - 6])*219474.63
   n_high_freq = 0
-  print 'Frequencies in cm-1:'
+  print('Frequencies in cm-1:')
   for freq in freq_cm:
     if freq > 5000: n_high_freq += 1
-    print freq
+    print(str(freq))
     assert not np.isnan(freq), "NaN encountered in frequencies! Exiting"
 
-  if n_high_freq > 0: print("Number of frequencies > 5000cm-1:", n_high_freq)
+  if n_high_freq > 0: print("Number of frequencies > 5000cm-1:"+str(n_high_freq))
 
   # seed random number generator
   np.random.seed(iseed)
@@ -170,7 +201,7 @@ def initial_wigner(iseed, x, hessian, masses, temp=0.0):
   # finite temperature distribution
   if temp > 1e-05:
     beta = 1 / (temp * 0.000003166790852)
-    print "beta = ", beta
+    print("beta = "+str(beta))
     alphax = alphax * np.tanh(np.sqrt(evals[0:ndims - 6]) * beta / 2)
   sigx = np.sqrt(1.0 / (4.0 * alphax))
   sigp = np.sqrt(alphax)
@@ -201,9 +232,8 @@ def initial_wigner(iseed, x, hessian, masses, temp=0.0):
   zpe = np.sum(alphax[0:ndims - 6])
   ke = 0.5 * np.sum(mom * mom / m)
   #         print np.sqrt(np.tanh(evals[0:ndims-6]/(2*0.0031668)))
-  print("FROM WIGNER FUNCTION:")
-  print "# ZPE = ", zpe
-  print "# kinetic energy = ", ke
+  print("# ZPE = "+str(zpe))
+  print("# kinetic energy = "+str(ke))
   print("END WIGNER")
 
   v = np.zeros_like(mom)
@@ -349,27 +379,21 @@ def h5py_copy_partial(oldh5f, lastframe, config):
   
   # Rename old TDCI subdirectory, create new one
   #shutil.move(config.JOBDIR+"electronic", config.JOBDIR+"electronic_old")
-  if os.path.exists(config.JOBDIR+"electronic_orig"):
-    p = subprocess.Popen('rm -rf '+config.JOBDIR+'electronic_orig', shell=True)
-    p.wait()
-  p = subprocess.Popen('mv '+config.JOBDIR+'electronic '+config.JOBDIR+'electronic_orig', shell=True)
+  rotate_file(config.JOBDIR+"electronic_old")
+  p = subprocess.Popen('mkdir '+config.JOBDIR+'electronic_old', shell=True)
   p.wait()
-  p = subprocess.Popen('mkdir '+config.JOBDIR+'electronic', shell=True)
-  p.wait()
-  # Get directories of prevjob and current job
-  prevjob_dir = oldh['tdci_dir'][lastframe-1].split("/")
-  prevjob_dir[-3] = 'electronic_orig' # [-3] should be 'electronic'
-  prevjob_dir = "/".join(prevjob_dir)
-  newjob_dir = oldh['tdci_dir'][lastframe]
-  newjob_old = oldh['tdci_dir'][lastframe].split("/")
-  newjob_old[-3] = 'electronic_orig' # [-3] should be 'electronic'
-  new_N = newjob_old[-2]
-  newjob_old = "/".join(newjob_old)
-  
-  p = subprocess.Popen('cp -r '+prevjob_dir+" "+oldh['tdci_dir'][lastframe-1], shell=True)
-  p.wait()
+  i = lastframe
+  while (i<maxn):
+    if os.path.exists(oldh['tdci_dir'][i]):
+      p = subprocess.Popen('mv '+oldh['tdci_dir'][i]+' '+config.JOBDIR+'electronic_old/.', shell=True)
+      p.wait()
+    i+=1
+
   p = subprocess.Popen('mkdir '+oldh['tdci_dir'][lastframe], shell=True)
   p.wait()
+  prevjob_dir = oldh['tdci_dir'][lastframe-1]
+  newjob_dir = oldh['tdci_dir'][lastframe]
+  newjob_old = config.JOBDIR+'electronic_old/'+newjob_dir.split('/')[-1]+'/'
   # Set up new jobfiles
   # These are actually just discarded...
   p = subprocess.Popen('cp '+prevjob_dir+"NewCoors.bin "+newjob_dir+"/PrevCoors.bin ;"+
@@ -378,29 +402,9 @@ def h5py_copy_partial(oldh5f, lastframe, config):
                        'cp '+prevjob_dir+"ImCn_end.bin "+newjob_dir+"/imcn_init.bin ;"+
                        'cp '+prevjob_dir+"field0.bin "+newjob_dir+"/field0.bin ;"+
                        'cp '+newjob_old+"temp.xyz "+newjob_dir+"/temp.xyz ;"+
-                       #'cp '+newjob_old+"test"+new_N+".in "+newjob_dir+"/test"+new_N+".in ;", shell=True)
                        'cp '+newjob_old+"tc.in "+newjob_dir+"/tc.in ;", shell=True)
   p.wait()
-
-  # Copy all previous jobs so electronic/ contains the full simulation
-  temppath = oldh['tdci_dir'][0].split("/")
-  temppath[-2] = "grad"
-  newpath = "/".join(temppath)
-  temppath[-3] = 'electronic_orig' # [-3] should be 'electronic'
-  temppath = "/".join(temppath)
-  p = subprocess.Popen('cp -r '+temppath+" "+newpath, shell=True)
-  p.wait()
-  #for i in range(0, lastframe-2):
-  for i in range(0, lastframe-1):
-    temppath = oldh['tdci_dir'][i].split("/")
-    temppath[-3] = 'electronic_orig' # [-3] should be 'electronic'
-    temppath = "/".join(temppath)
-    p = subprocess.Popen('cp -r '+temppath+" "+oldh['tdci_dir'][i], shell=True)
-    p.wait()
   
-
-
-  #x = xyz_read(newjob_dir+"/temp.xyz")[1]
   x = xyz_read(prevjob_dir+"/temp.xyz")[1]/bohrtoangs
   v_half = np.array(h5f['v_half'][lastframe-1])
   a = np.array(h5f['a'][lastframe-1])
@@ -462,7 +466,11 @@ class ConfigHandler:
     self.initial_electronic_state = config.initial_electronic_state
     self.RESTART = config.RESTART
     if self.RESTART: # Shouldnt need to include them if you're not restarting.
-      self.restart_frame = config.restart_frame
+      if (config.restart_frame is True): # Auto-detect
+        lf = lastfolder(self.JOBDIR+"electronic/")
+        self.restart_frame = int(lf.split("/")[-1])-2 # Two before last detected folder to be safe...
+      else:
+        self.restart_frame = config.restart_frame
       self.restart_hdf5 = config.restart_hdf5
     self.SCHEDULER = config.SCHEDULER
     self.TERACHEM = config.TERACHEM
@@ -520,7 +528,7 @@ class ConfigHandler:
     TDCI_TEMPLATE["tdci_simulation_time"] = str(self.tdci_simulation_time)
     TDCI_TEMPLATE["tdci_nstep"] = str(self.nstep)
     TDCI_TEMPLATE["tdci_nfields"] = str(self.nfields)
-    TDCI_TEMPLATE["tdci_grad_end"] = "no" # TODO: only do grad at halfstep to save time
+    TDCI_TEMPLATE["tdci_grad_end"] = "no"
     TDCI_TEMPLATE["tdci_grad_init"] = "no"
     TDCI_TEMPLATE["tdci_grad_half"] = "yes"
     TDCI_TEMPLATE["tdci_fieldfile0"] = "field0.bin"
@@ -530,6 +538,7 @@ class ConfigHandler:
     TDCI_TEMPLATE["tdci_krylov_end_interval"] = self.krylov_end_interval
     # Options that tccontroller may remove on initial step
     TDCI_TEMPLATE["tdci_diabatize_orbs"]  = "yes"
+    TDCI_TEMPLATE["tdci_write_binfiles"]  = "yes"
     TDCI_TEMPLATE["tdci_recn_readfile"]   = "recn_init.bin"
     TDCI_TEMPLATE["tdci_imcn_readfile"]  = "imcn_init.bin"
     TDCI_TEMPLATE["tdci_prevorbs_readfile"] = "PrevC.bin"

@@ -35,6 +35,11 @@ logprint = l.logprint
 input_module = utils.import_program_as_module(infile) # Hack for importing an arbitrary py file as a namespace
 config = utils.ConfigHandler(input_module) # Include defaults
 
+# Make sure we're not about to blow away data that already exists
+if (os.path.exists(config.JOBDIR+"/electronic") and config.RESTART==False):
+  logprint(config.JOBDIR+'/electronic already exists, but no RESTART requested? Resolve this before running.')
+  sys.exit()
+
 if os.path.abspath(config.JOBDIR)+"/inputfile.py" != infile:
   shutil.copy(infile, os.path.abspath(config.JOBDIR)+"/inputfile.py")
 

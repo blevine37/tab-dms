@@ -82,7 +82,8 @@ def dictkey(key):
              "tdci_nfields", "tdci_laser_freq", "tdci_photoneng", "tdci_fstrength",
              "tdci_fdirection", "tdci_ftype", "tdci_corrfn_t", "tdci_write_field",
              "tdci_floquet", "tdci_floquet_photons", "tdci_krylov_end", "tdci_krylov_end_n",
-             "tdci_krylov_end_interval", "tdci_diabatize_orbs", "tdci_recn_readfile",
+             "tdci_krylov_end_interval", "tdci_diabatize_orbs", "tdci_write_binfiles",
+             "tdci_recn_readfile",
              "tdci_imcn_readfile", "tdci_prevorbs_readfile", "tdci_prevcoords_readfile",
              "tdci_grad_init", "tdci_grad_half", "tdci_grad_end", "tdci_fieldfile0",
              "tdci_fieldfile1", "tdci_fieldfile2", "tdci_fieldfile3", "tdci_fieldfile4",
@@ -317,7 +318,6 @@ class job:
         write_bin_array(self.ImCn,self.dir+"imcn_init.bin")
       search_replace_file(self.dir+tempname, "tdci_prevorbs_readfile PrevC.bin", "")
       search_replace_file(self.dir+tempname, "tdci_prevcoords_readfile PrevCoors.bin", "")
-      search_replace_file(self.dir+tempname, "tdci_krylov_init cn_krylov_init.bin", "")
       return 0
 
     else: # Copy Prev Orbitals and Coords (in double4) for orbital diabatization
@@ -332,8 +332,6 @@ class job:
         shutil.copy(pjobd+"/ImCn_end.bin", self.dir+"/imcn_init.bin")
       else:
         write_bin_array(self.ImCn,self.dir+"imcn_init.bin")
-      if self.FIELD_INFO["krylov_end"]:
-        shutil.copy(pjobd+"/Cn_krylov_end.bin", self.dir+"/cn_krylov_init.bin")
       return 0
 
   def clean_files(self):
@@ -424,9 +422,9 @@ class job:
       logprint("In check_FOMO_grad_error: prev2job is None")
       return False
 
-    prevgrad = read_bin_array(self.pjob.dir+"gradinit.bin", 3*self.Natoms)
+    prevgrad = read_bin_array(self.pjob.dir+"tdci_grad_init.bin", 3*self.Natoms)
     rms_prevgrad = rms( prevgrad )
-    prev2grad = read_bin_array(self.pjob.pjob.dir+"gradinit.bin", 3*self.Natoms)
+    prev2grad = read_bin_array(self.pjob.pjob.dir+"tdci_grad_init.bin", 3*self.Natoms)
     rms_prev2grad = rms( prev2grad )
 
     prev_dev = np.abs(rms_prev2grad - rms_prevgrad)
@@ -447,11 +445,11 @@ class job:
     files = ["ReCn_end.bin","ImCn_end.bin", "misc.bin"]
     if (self.halfstep):
       if self.FIELD_INFO["half"] == 0:
-        files += ["tdcigrad.bin"] # First halfstep needs grad_end
-    else: files += ["tdcigrad_half.bin"] # Fullstep calculations need grad_half
+        files += ["tdci_grad_end.bin"] # First halfstep needs grad_end
+    else: files += ["tdci_grad_half.bin"] # Fullstep calculations need grad_half
 
-    if (self.n > 0) and (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
-      files += ["S_MIXED_MO_active.bin"]
+    #if (self.n > 0) and (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
+    #  files += ["S_MIXED_MO_active.bin"]
     if self.FIELD_INFO["krylov_end"]:
       files += ["ReCn_krylov_end.bin", "ImCn_krylov_end.bin", "Cn_krylov_end.bin", "E_krylov_end.bin", "tdcigrad_krylov.bin"]
     for fn in files:
@@ -557,6 +555,7 @@ class job:
     if not os.path.exists(self.dir+"norm"):
       logprint("file norm does not exist.")
     f = open(self.dir+"Pop",'r')
+    f.readline() # Move past the header
     l = f.readline()
     S0_start = float(l.split(",")[1])
     lp = None
@@ -580,7 +579,7 @@ class job:
   def gradoutput(self):
     logprint = self.logger.logprint
     filesgood = True
-    files = ["gradinit.bin", "States_Cn.bin", "States_E.bin", "misc.bin"]
+    files = ["tdci_grad_init.bin", "States_Cn.bin", "States_E.bin", "misc.bin"]
     for fn in files:
       if not os.path.exists(self.dir+fn):
         filesgood = False
@@ -588,7 +587,7 @@ class job:
     if not filesgood:
       
       return False
-    grad = read_bin_array(self.dir+"gradinit.bin", 3*self.Natoms)
+    grad = read_bin_array(self.dir+"tdci_grad_init.bin", 3*self.Natoms)
     grad.resize((self.Natoms,3))
     logprint("Grad:\n"+str(grad))
     #E = float(read_bin_array(self.dir+"Einit.bin", 1)[0])
@@ -655,16 +654,16 @@ class job:
       self.readmisc()
     
     # Format output structure
-    # How should we control this when we have an external field?
     eng_start = float(self.scan_outfile(["Initial", "energy:"], 2))
     eng = float(self.scan_outfile(["Final", "TDCI", "Energy:"], 3))
-    if np.abs( eng - eng_start) > 0.01: 
-      print("Energy changed too much during TDCI: {} -> {}".format(eng_start, eng))
-      return "ENERGY_CHANGE"
+    # How should we control this when we have an external field?
+    #if np.abs( eng - eng_start) > 0.01: 
+    #  print("Energy changed too much during TDCI: {} -> {}".format(eng_start, eng))
+    #  return "ENERGY_CHANGE"
 
 
-    if os.path.exists(self.dir+"gradinit.bin"):
-      grad_init = read_bin_array(self.dir+"gradinit.bin", 3*self.Natoms)
+    if os.path.exists(self.dir+"tdci_grad_init.bin"):
+      grad_init = read_bin_array(self.dir+"tdci_grad_init.bin", 3*self.Natoms)
       logprint("rms(grad_t=start_frame) : "+str(rms(grad_init)))
       grad_init.resize((self.Natoms, 3))
 
@@ -672,10 +671,10 @@ class job:
     grad_half = None
     if (self.halfstep):
       if self.FIELD_INFO["half"] == 0:
-	grad_end = read_bin_array(self.dir+"tdcigrad.bin", 3*self.Natoms)
+	grad_end = read_bin_array(self.dir+"tdci_grad_end.bin", 3*self.Natoms)
 	grad_end.resize((self.Natoms, 3))
     else: # Full timestep, only grad_half
-      grad_half = read_bin_array(self.dir+"tdcigrad_half.bin", 3*self.Natoms)
+      grad_half = read_bin_array(self.dir+"tdci_grad_half.bin", 3*self.Natoms)
       logprint("rms(grad_t=half) : "+str(rms(grad_half)))
       grad_half.resize((self.Natoms, 3))
 
@@ -741,15 +740,15 @@ class job:
       tdcierr = 27.2114*(eng - eng_tdci_start)
       logprint("Error diab ("+str(self.n-1)+"  -> "+str(self.n)+"  ): "+"{: .8f}".format(diaberr)+" eV")
       logprint("Error tdci ("+str(self.n)+"i -> "+str(self.n)+"f ): "+"{: .8f}".format(tdcierr)+" eV")
-      if diaberr > 0.5: printS = True
-      if (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
-        printS = True
-        S_prediab = read_bin_array(self.dir+"S_MIXED_MO_active.bin", acti**2)
-        S_prediab.resize((acti,acti))
-        for i in range(0,acti):
-          if np.abs(S_prediab[i][i]) < 0.5: logprint("WARNING: S_prediab["+str(i)+"]["+str(i)+"] = "+str(S_prediab[i][i]))
-          if np.linalg.norm(S_prediab[i]) < 0.9: logprint("WARNING: norm(S_prediab["+str(i)+"]) = "+str(np.linalg.norm(S_prediab[i])))
-      else: printS = False
+      #if diaberr > 0.5: printS = True
+      #if (self.TDCI_TEMPLATE["tdci_diabatize_orbs"] == "yes"):
+      #  printS = True
+      #  S_prediab = read_bin_array(self.dir+"S_MIXED_MO_active.bin", acti**2)
+      #  S_prediab.resize((acti,acti))
+      #  for i in range(0,acti):
+      #    if np.abs(S_prediab[i][i]) < 0.5: logprint("WARNING: S_prediab["+str(i)+"]["+str(i)+"] = "+str(S_prediab[i][i]))
+      #    if np.linalg.norm(S_prediab[i]) < 0.9: logprint("WARNING: norm(S_prediab["+str(i)+"]) = "+str(np.linalg.norm(S_prediab[i])))
+      #else: printS = False
 
     #normpop = self.scan_normpop()
     #S0_start, S0_end, norm_start, norm_end = normpop[0], normpop[1], normpop[2], normpop[3]
@@ -757,9 +756,9 @@ class job:
     #print((S0_start, S0_end, norm_start, norm_end))
     logprint("S0   start->end: "+str(S0_start)+" -> "+str(S0_end)+" ("+str(S0_end-S0_start)+")")
     logprint("norm start->end: "+str(norm_start)+" -> "+str(norm_end)+" ("+str(norm_end-norm_start)+")")
-    if printS:
-      logprint("S Prediab  : \n"+str(S_prediab))
-      logprint("S Prediab row norms: "+str(map(lambda x: np.linalg.norm(x), S_prediab)))
+    #if printS:
+    #  logprint("S Prediab  : \n"+str(S_prediab))
+    #  logprint("S Prediab row norms: "+str(map(lambda x: np.linalg.norm(x), S_prediab)))
       
 
     # ugh this is bad. error checking should have access to more information than we're outputting.
@@ -879,7 +878,7 @@ class tccontroller:
     grad_template["tdci_simulation_time"] = "0.01"
     grad_template["tdci_nstep"] = "1"
     grad_template["tdci_krylov_end"] = "no"
-    grad_template["tdci_diabatie_orbs"] = "no"
+    grad_template["tdci_diabatize_orbs"] = "no"
     remove_keys = ["tdci_fieldfile0", "tdci_fieldfile1", "tdci_fieldfile2", 
                    "tdci_prevorbs_readfile", "tdci_prevcoords_readfile", "tdci_krylov_init"]
     for key in remove_keys:

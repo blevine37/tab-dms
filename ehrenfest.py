@@ -113,6 +113,7 @@ class Ehrenfest:
       self.atoms, x = utils.xyz_read(geomfilename) # x in angstroms initially
       x = x / bohrtoangs # cast Initial geometry to Bohr
       self.masses = utils.getmasses(self.atoms)
+      v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
       #utils.h5py_update({'atoms': self.atoms})
 
       if self.tc.config.WIGNER_PERTURB: # Perturb according to wigner distribution
@@ -135,7 +136,6 @@ class Ehrenfest:
       t = 0.0
       recn = gradout["states"][self.tc.config.initial_electronic_state]
       imcn = np.zeros(len(recn))
-      v_timestep = np.zeros([len(self.atoms), 3]) # Velocitynorm = np.sum( np.array(ReCn)**2 ) at t=0
 
 
       a = np.zeros([len(self.atoms), 3]) # Accel at t=0
@@ -155,12 +155,14 @@ class Ehrenfest:
   # 
   def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
     realtime_start = time.time()  # For benchmarking
-    it = 0
     t = t_init
+    it = int(t_init/(self.delta*autimetosec*1e+18))
+    self.logprint("Starting at time "+str(t)+" as, step "+str(it))
+    self.logprint("Running until time "+str(self.tc.config.DURATION*1000)+" as, "+str(self.tc.config.MAXITERS)+" steps")
     x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
     a = 0.0 # initial acceleration is not used
     TCdata = None
-    while it < self.tc.config.MAXITERS: # go forever! :D
+    while it < self.tc.config.MAXITERS: # main loop!
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
       x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
