@@ -518,6 +518,8 @@ class ConfigHandler:
 
     self.atoms, self.xyz = xyz_read(config.xyzpath)
     self.xyzpath = config.xyzpath
+    try: self.velpath = config.velpath
+    except: self.velpath = False 
     # TDCI simulation time in femtoseconds
     self.tdci_simulation_time = float(config.TIMESTEP_AU)*autimetosec*1e15 # fs/s
 

@@ -114,6 +114,9 @@ class Ehrenfest:
       x = x / bohrtoangs # cast Initial geometry to Bohr
       self.masses = utils.getmasses(self.atoms)
       v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
+      if self.tc.config.velpath: # Usesr defined veloc file
+          at, vel = utils.xyz_read(self.tc.config.velpath)
+          v_timestep = vel
       #utils.h5py_update({'atoms': self.atoms})
 
       if self.tc.config.WIGNER_PERTURB: # Perturb according to wigner distribution
