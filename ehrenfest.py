@@ -225,9 +225,10 @@ class TAB(Ehrenfest):
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
       
-      if it == 0:
+      if it == 0:   #initial grad call
           gradout_int = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True)
-      else:         #reuse the data from end call
+          grad_select = [i for i in range(len(gradout_int["states"]))] #all gradients were calculated 
+      else:         #reuse the data from end-of-the-loop call
           gradout_int = gradout
       ######store the old population to get its derivatives   ##everything before propagation gradout_int
       states = gradout_int["states"]
@@ -246,18 +247,7 @@ class TAB(Ehrenfest):
       ######################################################
       #TAB Gegins here - history based correction###########
       ######################################################
-
-      gradout_mid = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True)        ###everthing after progpagation before collapsing gradout_mid
-      ReCn, ImCn = gradout_mid["recn"], gradout_mid["imcn"]
-      states = gradout_mid["states"]
-      newpop = (np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2
       
-      
-      aforces = np.array(gradout_mid["forces"]+gradout_int["forces"])/2
-
-      
-      
-          
       ####------------TAB-parameters--------------#####
       dimH = len(states)  #number of states
       deltatn = self.delta #classical time-step
@@ -271,6 +261,28 @@ class TAB(Ehrenfest):
       dtw = 0.10 #discrete time step for integrating over simulation history
       zpop = 1.0e-6
       dgscale = 1.0e+5
+     
+      #States populated after diabatization, if pop>zpop calculate forces
+      states = TCdata["states"]
+      steppop = (np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2 
+      grad_select2=[]
+      for i in range(len(states)):
+        if (steppop[i] >= zpop):
+          grad_select2.append(i)
+
+      #Get gradients x+dx
+      gradout_mid = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True, GradStatesSelect=grad_select2)        ###everthing after progpagation before collapsing gradout_mid
+      ReCn, ImCn = gradout_mid["recn"], gradout_mid["imcn"]
+      states = gradout_mid["states"]
+      newpop = (np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2
+      
+      aforces = np.array(gradout_mid["forces"]+gradout_int["forces"])/2
+
+      #If state becomes populated, do not average (previous containts zeros) 
+      newlypopulated = [i for i in grad_select2 if i not in grad_select]       
+      for i in newlypopulated:
+          print i,' became populated'
+          aforces[i] = gradout_mid["forces"][i]
       
       
       #########---For the restoration of wavefunctions--------#######
@@ -316,9 +328,15 @@ class TAB(Ehrenfest):
       
       ReCn = nct.real
       ImCn = nct.imag
-     
+
+      #Calculate gradients of populated states only
+      grad_select=[]
+      for i in range(len(states)):
+        if (npop[i] >= zpop):
+          grad_select.append(i)
+
       ##-----------Resclaing the Momentum to conseve total energy)----------#
-      gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=True) 
+      gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=True,GradStatesSelect=grad_select) 
       newpote = gradout["eng"]
       
       if (newpote > oldpote+oldkine):

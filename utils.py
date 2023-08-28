@@ -534,6 +534,7 @@ class ConfigHandler:
     TDCI_TEMPLATE["tdci_grad_init"] = "no"
     TDCI_TEMPLATE["tdci_grad_half"] = "yes"
     TDCI_TEMPLATE["tdci_grad_states"] = "no"
+    TDCI_TEMPLATE["tdci_grad_states_select"] = ""
     TDCI_TEMPLATE["tdci_fieldfile0"] = "field0.bin"
     # Krylov subspace options
     TDCI_TEMPLATE["tdci_krylov_end"] = ("yes" if self.krylov_end else "no")

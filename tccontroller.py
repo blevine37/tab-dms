@@ -547,6 +547,16 @@ class job:
       l = f.readline()
     logprint("key "+str(key)+" not found :( ")
     return None
+  
+  def scan_infile(self, key, pos):
+    f = open(self.dir+"tc.in", 'r')
+    l = f.readline()
+    while l != "":
+      if (len(l.split()) > len(key)):
+        if (l.split()[:len(key)] == key):
+          return l.split()[pos]
+      l = f.readline()
+    return False 
 
   def scan_normpop(self):
     logprint = self.logger.logprint
@@ -606,10 +616,21 @@ class job:
     states_eng = read_bin_array(self.dir+"States_E.bin", nstates)
     #read forces
     forces=[]
-    if str(self.scan_outfile(["tdci_grad_states"], 1)) == "yes":
+    if str(self.scan_infile(["tdci_grad_states"], 1)) == "yes":  #gradient calulcation 
+      if self.scan_infile(["tdci_grad_states_select"], 1):   #gradient of selected states only
+        gradstates = [int(string) for string in str(self.scan_outfile(["tdci_grad_states_select"], 1)).split(',')]
+        print('Grad on states:',gradstates)
         for i in range(nstates):
+          if i in gradstates:
+              f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
+              forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
+          else:
+              forces.append(np.zeros(3*self.Natoms))  #supply zeros otherwise
+      else:      #gradient of all states
+          for i in range(nstates):
             f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
-	    forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
+            forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
+
     return { "grad"       : grad,
              "eng"        : E,
              "states"     : states,
@@ -661,7 +682,15 @@ class job:
     #if np.abs( eng - eng_start) > 0.01: 
     #  print("Energy changed too much during TDCI: {} -> {}".format(eng_start, eng))
     #  return "ENERGY_CHANGE"
-
+    nstates = int(self.TDCI_TEMPLATE["cassinglets"])
+    if "casdoublets" in self.TDCI_TEMPLATE:
+      nstates+= int(self.TDCI_TEMPLATE["casdoublets"])
+    if "castriplets" in self.TDCI_TEMPLATE:
+      nstates+= int(self.TDCI_TEMPLATE["castriplets"])
+    if "casquartets" in self.TDCI_TEMPLATE:
+      nstates+= int(self.TDCI_TEMPLATE["casquartets"])
+    states = read_bin_array(self.dir+"States_Cn.bin", nstates*self.ndets)
+    states.resize((nstates, self.ndets))
 
     if os.path.exists(self.dir+"tdci_grad_init.bin"):
       grad_init = read_bin_array(self.dir+"tdci_grad_init.bin", 3*self.Natoms)
@@ -708,6 +737,7 @@ class job:
     output = { "recn": recn,  # 1d array, number of determinants
                "imcn": imcn,  # 1d array, number of determinants
                "eng": eng,    # float, Energy of current wfn
+               "states" : states, #CI vectors of states 
                #"grad": grad,    # 2d array, Natoms x 3 dimensions.   # We dont actually need grad at the end, right?
                #"grad_half": grad_half,    # 2d array, Natoms x 3 dimensions.
                "recn_krylov": recn_krylov,      # 1d array, 2*krylov_sub_n
@@ -869,7 +899,7 @@ class tccontroller:
     self.jobs.append(prevjob)
     return prevjob.N
 
-  def grad(self, xyz, ReCn=None, ImCn=None, DoGradStates=False):
+  def grad(self, xyz, ReCn=None, ImCn=None, DoGradStates=False, GradStatesSelect=None):
     grad_template = copy.deepcopy(self.TDCI_TEMPLATE)
     # overwrite template to do gradient stuff instead of tdci
     grad_template["tdci_grad_init"] = "yes"
@@ -882,6 +912,8 @@ class tccontroller:
     grad_template["tdci_diabatize_orbs"] = "no"
     if DoGradStates:
         grad_template["tdci_grad_states"] = "yes"
+        if GradStatesSelect:
+            grad_template["tdci_grad_states_select"] = ','.join([str(x) for x in GradStatesSelect])
     remove_keys = ["tdci_fieldfile0", "tdci_fieldfile1", "tdci_fieldfile2", 
                    "tdci_prevorbs_readfile", "tdci_prevcoords_readfile", "tdci_krylov_init"]
     for key in remove_keys:
