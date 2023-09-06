@@ -10,6 +10,7 @@ import numpy as np
 import shutil, os, subprocess, time
 import h5py
 import utils
+from copy import deepcopy
 
 # to install h5py:
 # $ apt install libhdf5-dev
@@ -229,7 +230,8 @@ class TAB(Ehrenfest):
           gradout_int = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True)
           grad_select = [i for i in range(len(gradout_int["states"]))] #all gradients were calculated 
       else:         #reuse the data from end-of-the-loop call
-          gradout_int = gradout
+          gradout_int = deepcopy(gradout)
+          grad_select = [i for i in grad_select3]
       ######store the old population to get its derivatives   ##everything before propagation gradout_int
       states = gradout_int["states"]
       ReCn, ImCn = gradout_int["recn"], gradout_int["imcn"]
@@ -329,14 +331,27 @@ class TAB(Ehrenfest):
       ReCn = nct.real
       ImCn = nct.imag
 
-      #Calculate gradients of populated states only
-      grad_select=[]
+      #States populated after collapse, is there a newly poopulated state? 
+      grad_select3=[]
       for i in range(len(states)):
         if (npop[i] >= zpop):
-          grad_select.append(i)
+          grad_select3.append(i)
+      newlypopulated = [i for i in grad_select3 if i not in grad_select2]
+      for i in newlypopulated:
+        print i,' became populated after collapse'
 
+      #After collapse calculation
+      if len(newlypopulated) == 0:
+          gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=False)  ###everthing after progpagation after collapsing
+          gradout["forces"]=gradout_mid["forces"]  #Reuse state gradients (geometry is unchanged)
+          grad_select3 = [i for i in grad_select2] 
+      else:
+          gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=True,GradStatesSelect=newlypopulated) ###everthing after progpagation after collapsing + newly populated states gradient
+          for i in grad_select2:  #Insert already calculated state gradients (geometry is unchanged)
+            gradout["forces"][i] = gradout_mid["forces"][i]
+          grad_select3 = grad_select2 + newlypopulated
+  
       ##-----------Resclaing the Momentum to conseve total energy)----------#
-      gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=True,GradStatesSelect=grad_select) 
       newpote = gradout["eng"]
       
       if (newpote > oldpote+oldkine):
