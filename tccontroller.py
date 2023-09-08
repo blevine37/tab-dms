@@ -907,7 +907,7 @@ class tccontroller:
     grad_template["tdci_grad_half"] = "no"
     grad_template["tdci_grad_end"] = "no"
     grad_template["tdci_fstrength"] = "0.0"
-    grad_template["tdci_simulation_time"] = "0.01"
+    grad_template["tdci_simulation_time"] = self.config.TIMESTEP_E_AS*1E-3
     grad_template["tdci_nstep"] = "1"
     grad_template["tdci_krylov_end"] = "no"
     grad_template["tdci_diabatize_orbs"] = "no"
