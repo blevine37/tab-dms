@@ -251,6 +251,21 @@ def initial_wigner(iseed, x, hessian, masses, temp=0.0):
   print(v)
   return pos, v
 
+#Initialize wavefunction from file
+def read_c0files():
+  try:
+       bytesize = os.path.getsize('ReCn0.bin')
+       cnlen = bytesize/8 #assume stream of doubles
+       f = open('ReCn0.bin', 'rb')
+       recn = np.array(struct.unpack('d'*cnlen, f.read()))
+       f.close()
+       f = open('ImCn0.bin', 'rb')
+       imcn = np.array(struct.unpack('d'*cnlen, f.read()))
+       f.close()
+  except:
+       print 'Something went wrong reading ./ReCn0.bin ./ImCn0.bin'
+       sys.exit()
+  return recn, imcn
 
 
 ########################################
@@ -483,6 +498,7 @@ class ConfigHandler:
     self.job_template_contents = config.job_template_contents
     self.JOB_TEMPLATE = config.job_template_contents
     self.f0_values = config.f0_values
+    self.USEC0FILE = config.USEC0FILE
 
     self.FIX_FOMO = False
     try: self.FIX_FOMO = config.FIX_FOMO

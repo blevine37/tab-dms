@@ -136,10 +136,18 @@ class Ehrenfest:
 
 
       # Call Terachem to Calculate states
-      gradout = self.tc.grad(x*bohrtoangs)
-      t = 0.0
-      recn = gradout["states"][self.tc.config.initial_electronic_state]
-      imcn = np.zeros(len(recn))
+      #Iniital ReCn ImCn from file?
+      if self.tc.config.USEC0FILE:
+        print 'Reading initial WF from file'
+        recn, imcn = utils.read_c0files()
+        gradout = self.tc.grad(x*bohrtoangs,recn,imcn)
+        t = 0.0
+      else:
+      #Regular call to TC
+        gradout = self.tc.grad(x*bohrtoangs)
+        t = 0.0
+        recn = gradout["states"][self.tc.config.initial_electronic_state]
+        imcn = np.zeros(len(recn))
 
 
       a = np.zeros([len(self.atoms), 3]) # Accel at t=0

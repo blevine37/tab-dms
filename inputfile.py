@@ -23,6 +23,8 @@ WIGNER_SEED = random.randint(0, 2**32-1)     # Random seed for Wigner distributi
 # If you already ran a Hessian calculation, you can include the path to the Hessian.bin to skip the freq calculation
 HESSIAN_FILE = None
 
+#Load initial wavefunction from file
+USEC0FILE = False #Program will look for ./ReCn0.bin ./ImCn0.bin
 
 ########################################
 # TDCI TeraChem Template
