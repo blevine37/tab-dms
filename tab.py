@@ -1,23 +1,17 @@
-#######################################
-# Ehrenfest code for TDCI
+######################################################
+# TAB code for TDCI
 #
-# All calculations are in atomic units (au)
-# Source: https://en.wikipedia.org/wiki/Hartree_atomic_units
-########################################
+######################################################
 
 import tccontroller
+import ehrenfest
 import numpy as np
 import shutil, os, subprocess, time
 import h5py
 import utils
+import math
+
 from copy import deepcopy
-
-# to install h5py:
-# $ apt install libhdf5-dev
-# $ HDF5_DIR=/usr/lib/x86_64-linux-gnu/hdf5/serial/
-# $ pip2 install h5py
-
-
 
 ########################################
 # Constants
@@ -29,192 +23,7 @@ bohrtoangs = 0.529177210903
 autimetosec = 2.4188843265857e-17
 
 
-#######Parameters#######################
-
-
-
-class Ehrenfest:
-  def __init__(self, delta, logprint, tc):
-    self.logprint = logprint
-    self.tc = tc
-    self.delta = tc.config.TIMESTEP_AU
-    self.atoms = tc.config.FIELD_INFO["atoms"]
-    self.masses = utils.getmasses(self.atoms)
-
-  # Accepts a gradient from TCdata, returns (normalized) acceleration.
-  def getAccel(self, grad, ReCn, ImCn):
-    norm = np.sum( np.array(ReCn)**2 )
-    if ImCn is not None:
-      norm += np.sum( np.array(ImCn)**2 )
-    # Get forces (Hartree/Bohr)
-    accs = -(grad/norm)
-    # Get accelerations
-    for a, mass in zip(accs, self.masses):
-      a /= mass
-    # Return accelerations
-    return accs
-
-  def ke_calc(self, v):
-    print(v)
-    ke = 0 # Initialize energy variable
-    # Iterate over masses
-    for m_i, v_i in zip(self.masses, v):
-      ke += m_i * v_i.dot(v_i) / 2
-    return ke
-
-  def savestate(self, x, v, v_half, a, t, TCdata, atoms=None):
-    # Update HDF5
-    data = { 'x'         : x,
-             'v'         : v,
-             'v_half'    : v_half,
-             'a'         : a,
-             'ke'        : self.ke_calc(v),
-             'time'      : t,
-              }
-    if TCdata is None:
-      #import pdb; pdb.set_trace()
-      data.update({ 
-                    'pe'        : 0,
-	            'tdci_dir'  : "",
-                 })
-
-    else:
-      data.update({ 
-                    'pe'        : TCdata['eng'],
-		    'recn_half' : TCdata['recn'],
-	            'imcn_half' : TCdata['imcn'],
-	            'tdci_dir' : TCdata['tdci_dir'],
-                 })
-
-    if atoms is not None:
-      data['atoms'] = atoms
-    self.logprint("Updating HDF5")
-    utils.h5py_update(data)
-
-  def loadstate(self):
-    config = self.tc.config
-    N = int(config.restart_frame) # Restart at frame N
-    # Create a new hdf5 file with steps 0,...,N-1, and then restart calculation with frame N.
-    x_, v_half_, a_, t_, recn_, imcn_, self.atoms = utils.h5py_copy_partial(config.restart_hdf5, config.restart_frame, config)
-    time.sleep(2) # Wait a sec to make sure IO operations are done.
-    self.tc.N = config.restart_frame
-    self.tc.restart_setup() # Prepare tccontroller for running from a restart
-    print(( x_, v_half_, a_, t_, recn_, imcn_))
-    return x_, v_half_, a_, t_, recn_, imcn_
-    
-  # Prepare initial state and start propagation.
-  def run_ehrenfest(self):
-    x, v, v_timestep, a, pe, recn, imcn = None, None, None, None, None, None, None
-    t = 0
-    if self.tc.config.RESTART:
-      x, v, a, t, recn, imcn = self.loadstate()
-    else:
-      utils.clean_files(self.tc.config.JOBDIR) # Clean job directory
-      geomfilename = self.tc.config.xyzpath # .xyz filename in job directory
-      self.atoms, x = utils.xyz_read(geomfilename) # x in angstroms initially
-      x = x / bohrtoangs # cast Initial geometry to Bohr
-      self.masses = utils.getmasses(self.atoms)
-      v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
-      if self.tc.config.velpath: # Usesr defined veloc file
-          at, vel = utils.xyz_read(self.tc.config.velpath)
-          v_timestep = vel
-      #utils.h5py_update({'atoms': self.atoms})
-
-      if self.tc.config.WIGNER_PERTURB: # Perturb according to wigner distribution
-        TCdata = None
-        if self.tc.config.HESSIAN_FILE is None:
-          TCdata = self.tc.hessian(x*bohrtoangs, self.tc.config.WIGNER_TEMP )
-        else:
-          TCdata = utils.read_hessfile(len(x), self.tc.config.HESSIAN_FILE )
-        x, v_timestep = utils.initial_wigner( self.tc.config.WIGNER_SEED,
-                                              x, TCdata["hessian"], self.masses,
-                                              self.tc.config.WIGNER_TEMP ) 
-	#x = x / bohrtoangs
-	#v_timestep = v_timestep / bohrtoangs
-        print(x)
-        utils.xyz_write(self.atoms, x*bohrtoangs, "wigner_output.xyz")
-
-
-      # Call Terachem to Calculate states
-      gradout = self.tc.grad(x*bohrtoangs)
-      t = 0.0
-      recn = gradout["states"][self.tc.config.initial_electronic_state]
-      imcn = np.zeros(len(recn))
-
-
-      a = np.zeros([len(self.atoms), 3]) # Accel at t=0
-      v, a, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep
-      self.savestate(x, v_timestep, v, a, t, TCdata, atoms=self.atoms) # Save initial state
-
-    self.propagate(x, v, t, recn, imcn)
-    
-
-  # Does Ehrenfest propagation loop
-  
-  # t_init    : time t
-  # x_init    : Coordinates at time t
-  # v_init    : Velocity at t+(dt/2)
-  # ReCn_init : Real CI Vector at time t+(dt/2)
-  # ImCn_init : Imaginary CI Vector at time t+(dt/2)
-  # 
-  def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
-    realtime_start = time.time()  # For benchmarking
-    t = t_init
-    it = int(t_init/(self.delta*autimetosec*1e+18))
-    self.logprint("Starting at time "+str(t)+" as, step "+str(it))
-    self.logprint("Running until time "+str(self.tc.config.DURATION*1000)+" as, "+str(self.tc.config.MAXITERS)+" steps")
-    x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
-    a = 0.0 # initial acceleration is not used
-    TCdata = None
-    while it < self.tc.config.MAXITERS: # main loop!
-      t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
-      x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
-      x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
-      ReCn, ImCn = TCdata["recn"], TCdata["imcn"]
-      self.savestate(x, v_timestep, v, a, t, TCdata)
-      self.logprint("Iteration " + str(it).zfill(4) + " finished")
-      it+=1
-    self.logprint("Completed Ehrenfest Propagation!")
-    time_simulated = (t-t_init)/1000.
-    import datetime
-    realtime = str( datetime.timedelta( seconds=(time.time() - realtime_start) )) 
-    self.logprint("Simulated "+str(time_simulated)+" fs with "+str(it)+" steps in "+realtime+" Real time.")
-
-      
-    
-  # Accepts current state, runs TDCI, calculates next state.
-  # Input:
-  #  x      : Coordinates at time t-dt
-  #  v      : Velocity at time t-(dt/2)
-  # Output:
-  #  x_next     : Coordinates at time t
-  #  v_timestep : Velocity at time t
-  #  v_next     : Velocity at time t+(dt/2)
-  #  a          : Acceleration at time t
-  #  TCdata     : Return dictionary from tccontroller TDCI job from t-(dt/2) to t+(dt/2)
-  def step(self, x, v, ReCn=None, ImCn=None):
-    x_next = x + v*self.delta
-    TCdata = self.tc.nextstep(x_next*bohrtoangs, ReCn=ReCn, ImCn=ImCn) # Do TDCI! \(^0^)/
-    a = self.getAccel(TCdata["grad_half"], TCdata["recn"], TCdata["imcn"])
-    v_timestep = v + a*self.delta/2.
-    v_next = v + a*self.delta
-    return x_next, v_timestep, v_next, a, TCdata
-    
-  # Input:
-  #  x      : Coordinates at time t
-  #  v      : Velocity at time t
-  # Output: 
-  #  v_next : Velocity at time t+(dt/2)
-  #  a      : Acceleration at time t
-  #  TCdata : Return dictionary from tccontroller TDCI job from t to t+(dt/2)
-  def halfstep(self, x, v, ReCn=None, ImCn=None):
-    TCdata = self.tc.halfstep(x*bohrtoangs, ReCn=ReCn, ImCn=ImCn) # Do TDCI! \(^0^)/
-    a = self.getAccel(TCdata["grad_end"], TCdata["recn"], TCdata["imcn"])
-    print((v, a, self.delta))
-    v_next = v + a*self.delta/2.
-    return v_next, a, TCdata
-
-class TAB(Ehrenfest):
+class TAB(ehrenfest.Ehrenfest):
   def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
     realtime_start = time.time()  # For benchmarking
     it = 0
@@ -222,6 +31,8 @@ class TAB(Ehrenfest):
     x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
     a = 0.0 # initial acceleration is not used
     TCdata = None
+    
+    dcps = utils.getdcps(self.atoms)
     while it < self.tc.config.MAXITERS: # go forever! :D
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
@@ -232,18 +43,20 @@ class TAB(Ehrenfest):
       else:         #reuse the data from end-of-the-loop call
           gradout_int = deepcopy(gradout)
           grad_select = [i for i in grad_select3]
-      ######store the old population to get its derivatives   ##everything before propagation gradout_int
+      ######store the old population to get its derivatives
       states = gradout_int["states"]
       ReCn, ImCn = gradout_int["recn"], gradout_int["imcn"]
       
-      oldpop = (np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2 #adiabatic populations
+      oldpop = ((np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2).real # ~adiabatic populations in "states"-basis
       
-      oldpote = gradout_int["eng"]
-      oldkine = self.ke_calc(v)
+      #oldpote = gradout_int["eng"]
+      #oldkine = self.ke_calc(v)  #Kinetic energy before Ehrenfest
       
       #### Ehrenfest-TDCI propagation ######################
       x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
       
+      oldpote = TCdata["eng"] 
+      oldkine = self.ke_calc(v)  #Kinetic energy after Ehrenfest
 
       ReCn, ImCn = TCdata["recn"], TCdata["imcn"]   # New Ehrenfest wavefunctions
       ######################################################
@@ -253,7 +66,7 @@ class TAB(Ehrenfest):
       ####------------TAB-parameters--------------#####
       dimH = len(states)  #number of states
       deltatn = self.delta #classical time-step
-      dcp=6 # Decoherence correction parameter
+      
       nzthresh = 1.0e-10 # Threshold for considering numbers numerically zero
       errortol = 1.0e-6 #Tolerance for cumulative errors in collapse probabilities
       npthresh = 1.0e-7 #Tolerance for negative probabilities
@@ -266,7 +79,7 @@ class TAB(Ehrenfest):
      
       #States populated after diabatization, if pop>zpop calculate forces
       states = TCdata["states"]
-      steppop = (np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2 
+      steppop = ((np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2).real
       grad_select2=[]
       for i in range(len(states)):
         if (steppop[i] >= zpop):
@@ -276,7 +89,9 @@ class TAB(Ehrenfest):
       gradout_mid = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True, GradStatesSelect=grad_select2)        ###everthing after progpagation before collapsing gradout_mid
       ReCn, ImCn = gradout_mid["recn"], gradout_mid["imcn"]
       states = gradout_mid["states"]
-      newpop = (np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2
+      ReCn_states = np.dot(ReCn,np.transpose(states))	# coefficient in the ~adiabatic basis('states' basis)
+      ImCn_states = np.dot(ImCn,np.transpose(states))
+      newpop = ReCn_states**2.0.real + ImCn_states**2.0.real
       
       aforces = np.array(gradout_mid["forces"]+gradout_int["forces"])/2
 
@@ -299,7 +114,7 @@ class TAB(Ehrenfest):
      
       i = 0
       while i < dimH:
-      	amp[i] = np.dot(sVR[i,:],(ReCn+1j*ImCn))/norm2ct
+      	amp[i] = (ReCn_states[i]+1j*ImCn_states[i])/norm2ct
       	
       	if (newpop[i] == 0):
       	  ampdir[i] = 1.0
@@ -313,7 +128,7 @@ class TAB(Ehrenfest):
       odotrho = (newpop - oldpop)/deltatn  #derivative of rho
        
       ###---Collapsing-------###########################
-      npop = self.gcollapse(dimH,deltatn,aforces,newpop,dcp,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale)
+      npop = self.gcollapse(dimH,deltatn,aforces,newpop,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale)
       
       ###---Restoring the wavefunctions--------#########
       poparray = npop
@@ -357,11 +172,11 @@ class TAB(Ehrenfest):
       if (newpote > oldpote+oldkine):
       	self.logprint("No enough energy, jump back")
       	##Reverse momentum########---------
-        v_timestep = -v_timestep 
+        v = -v
       else:
       	newkine = oldpote + oldkine - newpote
       	scale = (newkine/oldkine)**0.50
-      	v_timestep *= scale 
+      	v *= scale 
       	TCdata["recn"] = ReCn
       	TCdata["imcn"] = ImCn
       
@@ -373,7 +188,7 @@ class TAB(Ehrenfest):
     import datetime
     realtime = str( datetime.timedelta( seconds=(time.time() - realtime_start) ))
     self.logprint("Simulated "+str(time_simulated)+" fs with "+str(it)+" steps in "+realtime+" Real time.")
-  def gcollapse(self,dimH,deltatn,aforces,poparray,dcp,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale):
+  def gcollapse(self,dimH,deltatn,aforces,poparray,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale):
         
         import random	
         from scipy.optimize import lsq_linear
@@ -391,8 +206,13 @@ class TAB(Ehrenfest):
 	while i < dimH:
 		j = i + 1
 		while j < dimH:
-			invtau[i][j] = (np.sum(abs(aforces[i]-aforces[j])**2.0)/(8.0*dcp))**0.50
-			invtau[j][i] = invtau[i][j]
+                        k = 0 #iterate through atoms/degrees of freedom
+                        while k < len(dcps):
+				invtau[i][j] = ((np.sum(abs(aforces[i][k]-aforces[j][k])**2.0+abs(aforces[i][k+1]-aforces[j][k+1])**2.0+abs(aforces[i][k+2]-aforces[j][k+2])**2.0))/(8.0*dcps[k]))**0.50
+			        invtau[j][i] = invtau[i][j]
+                                k = k + 1
+			#invtau[i][j] = (np.sum(abs(aforces[i]-aforces[j])**2.0)/(8.0*dcp))**0.50
+			#invtau[j][i] = invtau[i][j]
 			j = j + 1
 		i = i + 1
 	pass
@@ -929,9 +749,3 @@ class TAB(Ehrenfest):
 #	print icstates
 
 	return icstates
-
-
-    
-
-    
-

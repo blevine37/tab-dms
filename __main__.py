@@ -2,6 +2,7 @@
 import sys, os, shutil
 import tccontroller, utils
 import ehrenfest
+import tab
 
 ########################################
 # Read input file
@@ -45,8 +46,8 @@ if os.path.abspath(config.JOBDIR)+"/inputfile.py" != infile:
 
 tc = tccontroller.tccontroller(config, logger=l)
 
-ehrenfest_ = ehrenfest.TAB(config.TIMESTEP_AU, logprint, tc)
-
+#ehrenfest_ = ehrenfest.TAB(config.TIMESTEP_AU, logprint, tc)
+ehrenfest_ = tab.TAB(config.TIMESTEP_AU, logprint, tc)
 
 
 ########################################
@@ -54,7 +55,7 @@ ehrenfest_ = ehrenfest.TAB(config.TIMESTEP_AU, logprint, tc)
 ########################################
 # Print header
 logprint("TDCI + TAB-DMS")
-#   get commit number
+   get commit number
 srcpath = os.path.dirname(os.path.realpath(__file__))
 commit = ""
 with open( srcpath+"/.git/refs/heads/main", 'r') as f:
