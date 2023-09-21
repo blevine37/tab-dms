@@ -128,57 +128,63 @@ class TAB(ehrenfest.Ehrenfest):
       odotrho = (newpop - oldpop)/deltatn  #derivative of rho
        
       ###---Collapsing-------###########################
-      npop = self.gcollapse(dimH,deltatn,aforces,newpop,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale)
+      npop, track = self.gcollapse(dimH,deltatn,aforces,newpop,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale)
       
-      ###---Restoring the wavefunctions--------#########
-      poparray = npop
-      namp = np.zeros((dimH),dtype=complex)
-      nct = np.zeros((dimH,1),dtype=complex)
-      
-      i = 0
-      while i < dimH:
-      	namp[i] = ampdir[i]*(npop[i]**0.5)*norm2ct
-      	i = i + 1
-      pass
-      
-      nct = np.dot(namp,sVR)
-      
-      ReCn = nct.real
-      ImCn = nct.imag
-
-      #States populated after collapse, is there a newly poopulated state? 
-      grad_select3=[]
-      for i in range(len(states)):
-        if (npop[i] >= zpop):
-          grad_select3.append(i)
-      newlypopulated = [i for i in grad_select3 if i not in grad_select2]
-      for i in newlypopulated:
-        print i,' became populated after collapse'
-
-      #After collapse calculation
-      if len(newlypopulated) == 0:
-          gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=False)  ###everthing after progpagation after collapsing
-          gradout["forces"]=gradout_mid["forces"]  #Reuse state gradients (geometry is unchanged)
-          grad_select3 = [i for i in grad_select2] 
+      if (track == 0):
+        self.logprint("No collapsing at "+str(it)+" time step")
       else:
-          gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=True,GradStatesSelect=newlypopulated) ###everthing after progpagation after collapsing + newly populated states gradient
-          for i in grad_select2:  #Insert already calculated state gradients (geometry is unchanged)
-            gradout["forces"][i] = gradout_mid["forces"][i]
-          grad_select3 = grad_select2 + newlypopulated
+        ###---Restoring the wavefunctions--------#########
+        self.logprint("TAB collapsed at"+str(it)+" time step")
+        poparray = npop
+        namp = np.zeros((dimH),dtype=complex)
+        nct = np.zeros((dimH,1),dtype=complex)
+      
+        i = 0
+        while i < dimH:
+      	  namp[i] = ampdir[i]*(npop[i]**0.5)*norm2ct
+      	  i = i + 1
+        pass
+      
+        nct = np.dot(namp,sVR)
+      
+        ReCn = nct.real
+        ImCn = nct.imag
+
+        #States populated after collapse, is there a newly poopulated state? 
+        grad_select3=[]
+        for i in range(len(states)):
+          if (npop[i] >= zpop):
+            grad_select3.append(i)
+        newlypopulated = [i for i in grad_select3 if i not in grad_select2]
+        for i in newlypopulated:
+          print i,' became populated after collapse'
+
+        #After collapse calculation
+        if len(newlypopulated) == 0:
+            gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=False)  ###everthing after progpagation after collapsing
+            gradout["forces"]=gradout_mid["forces"]  #Reuse state gradients (geometry is unchanged)
+            grad_select3 = [i for i in grad_select2] 
+        else:
+            gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=True,GradStatesSelect=newlypopulated) ###everthing after progpagation after collapsing + newly populated states gradient
+            for i in grad_select2:  #Insert already calculated state gradients (geometry is unchanged)
+              gradout["forces"][i] = gradout_mid["forces"][i]
+            grad_select3 = grad_select2 + newlypopulated
   
-      ##-----------Resclaing the Momentum to conseve total energy)----------#
-      newpote = gradout["eng"]
+        ##-----------Resclaing the Momentum to conseve total energy)----------#
+        newpote = gradout["eng"]
       
-      if (newpote > oldpote+oldkine):
-      	self.logprint("No enough energy, jump back")
-      	##Reverse momentum########---------
-        v = -v
-      else:
-      	newkine = oldpote + oldkine - newpote
-      	scale = (newkine/oldkine)**0.50
-      	v *= scale 
-      	TCdata["recn"] = ReCn
-      	TCdata["imcn"] = ImCn
+        if (newpote > oldpote+oldkine):
+      	  self.logprint("No enough energy, jump back")
+      	  ##Reverse momentum########---------
+          v = -v
+        else:
+      	  newkine = oldpote + oldkine - newpote
+      	  scale = (newkine/oldkine)**0.50
+      	  ##Rescale the momentum and update the wave function##
+          self.logprint("Kinetic energy is lifted by "+str(newkine-oldkine))
+          v *= scale 
+      	  TCdata["recn"] = ReCn
+      	  TCdata["imcn"] = ImCn
       
       self.savestate(x, v_timestep, v, a, t, TCdata)
       self.logprint("Iteration " + str(it).zfill(4) + " finished")
@@ -195,7 +201,8 @@ class TAB(ehrenfest.Ehrenfest):
         import math
         # Rules ========================================================
 	# i, j, k, l, m, and n are all reserved for integer incrementing
-
+	
+	random.seed(55555)
 
 	# General setup ================================================
 	npop = np.zeros((dimH)) 	# Stores output electronic populations
@@ -569,7 +576,7 @@ class TAB(ehrenfest.Ehrenfest):
 	# constructing npop from the density matrix
 
 	if (track == 0):
-		return poparray
+		return poparray, track
 	pass
 
 	k = 0
@@ -591,7 +598,7 @@ class TAB(ehrenfest.Ehrenfest):
 #	print 'early stop'
 #	sys.exit()
 
-	return npop 
+	return npop, track 
   
   
   
