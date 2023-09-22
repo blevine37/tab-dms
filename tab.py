@@ -31,8 +31,9 @@ class TAB(ehrenfest.Ehrenfest):
     x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
     a = 0.0 # initial acceleration is not used
     TCdata = None
-    
+    #dcps = 6
     dcps = utils.getdcps(self.atoms)
+    self.logprint("dcps are "+str(dcps))
     while it < self.tc.config.MAXITERS: # go forever! :D
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
@@ -40,15 +41,17 @@ class TAB(ehrenfest.Ehrenfest):
       if it == 0:   #initial grad call
           gradout_int = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True)
           grad_select = [i for i in range(len(gradout_int["states"]))] #all gradients were calculated 
+          self.logprint("grad_select is "+str(grad_select))
       else:         #reuse the data from end-of-the-loop call
           gradout_int = deepcopy(gradout)
           #grad_select = grad_select3
       ######store the old population to get its derivatives
       states = gradout_int["states"]
+      self.logprint("There are "+str(len(states))+" states")
       ReCn, ImCn = gradout_int["recn"], gradout_int["imcn"]
       
       oldpop = ((np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2).real # ~adiabatic populations in "states"-basis
-      
+      self.logprint("Popluation before ehrenfest is "+str(oldpop)) 
       #oldpote = gradout_int["eng"]
       #oldkine = self.ke_calc(v)  #Kinetic energy before Ehrenfest
       
@@ -80,21 +83,25 @@ class TAB(ehrenfest.Ehrenfest):
       #States populated after diabatization, if pop>zpop calculate forces
       states = TCdata["states"]
       steppop = ((np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2).real
-      grad_select2=[i for i in range(3)]
+
+      self.logprint("Population after ehrenfest is "+str(steppop))
+      #grad_select2=[i for i in range(3)]
       #for i in range(len(states)):
         #if (steppop[i] >= zpop):
           #grad_select2.append(i)
 
       #Get gradients x+dx
-      gradout_mid = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True, GradStatesSelect=grad_select2)        ###everthing after progpagation before collapsing gradout_mid
+      gradout_mid = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True, GradStatesSelect=grad_select)        ###everthing after progpagation before collapsing gradout_mid
       ReCn, ImCn = gradout_mid["recn"], gradout_mid["imcn"]
       states = gradout_mid["states"]
+      self.logprint("There are "+str(len(states))+" states")
       ReCn_states = np.dot(ReCn,np.transpose(states))	# coefficient in the ~adiabatic basis('states' basis)
       ImCn_states = np.dot(ImCn,np.transpose(states))
       newpop = ReCn_states**2.0.real + ImCn_states**2.0.real
-      
-      aforces = np.array(gradout_mid["forces"]+gradout_int["forces"])/2
-
+      self.logprint("There are "+str(len(gradout_int["forces"]))+ " initial forces")
+      self.logprint("There are "+str(len(gradout_mid["forces"]))+ " mid forces")
+      aforces = (np.array(gradout_mid["forces"])+np.array(gradout_int["forces"]))/2
+      self.logprint("There are "+str(len(aforces))+" state forces")
       #If state becomes populated, do not average (previous containts zeros) 
       #newlypopulated = [i for i in grad_select2 if i not in grad_select]       
       #for i in newlypopulated:
@@ -129,7 +136,7 @@ class TAB(ehrenfest.Ehrenfest):
        
       ###---Collapsing-------###########################
       npop, track = self.gcollapse(dimH,deltatn,aforces,newpop,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale)
-      
+      self.logprint("Population after collapsing is "+str(npop))
       if (track == 0):
         self.logprint("No collapsing at "+str(it)+" time step")
         gradout = gradout_mid
@@ -185,6 +192,7 @@ class TAB(ehrenfest.Ehrenfest):
         else:
       	  newkine = oldpote + oldkine - newpote
       	  scale = (newkine/oldkine)**0.50
+          self.logprint("Kinetic energy is lifted by "+str(newkine-oldkine))
       	  ##Rescale the momentum and update the wave function##
           v *= scale 
       	  TCdata["recn"] = ReCn
@@ -219,14 +227,14 @@ class TAB(ehrenfest.Ehrenfest):
 		while j < dimH:
                         k = 0 #iterate through atoms/degrees of freedom
                         while k < len(dcps):
-				invtau[i][j] = ((np.sum(abs(aforces[i][k]-aforces[j][k])**2.0+abs(aforces[i][k+1]-aforces[j][k+1])**2.0+abs(aforces[i][k+2]-aforces[j][k+2])**2.0))/(8.0*dcps[k]))**0.50
-			        invtau[j][i] = invtau[i][j]
+				invtau[i][j] += ((np.sum(abs(aforces[i][3*k]-aforces[j][3*k])**2.0+abs(aforces[i][3*k+1]-aforces[j][3*k+1])**2.0+abs(aforces[i][3*k+2]-aforces[j][3*k+2])**2.0))/(8.0*dcps[k]))**0.50
                                 k = k + 1
 			#invtau[i][j] = (np.sum(abs(aforces[i]-aforces[j])**2.0)/(8.0*dcp))**0.50
-			#invtau[j][i] = invtau[i][j]
+			invtau[j][i] = invtau[i][j]
 			j = j + 1
 		i = i + 1
 	pass
+        self.logprint("invtau is "+str(invtau))
 
 	# computing the weight function
 
@@ -439,7 +447,7 @@ class TAB(ehrenfest.Ehrenfest):
 #                        print Pnc
                         print 'current eseg'
                         print eseg
-                        sys.exit()
+                        #sys.exit()
                 pass
 
                 bcore = []      # block coordinates for fastest decaying elements

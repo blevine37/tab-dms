@@ -617,21 +617,26 @@ class job:
     #read forces
     forces=[]
     if str(self.scan_infile(["tdci_grad_states"], 1)) == "yes":  #gradient calulcation 
-      if self.scan_infile(["tdci_grad_states_select"], 1):   #gradient of selected states only
-        gradstates = [int(string) for string in str(self.scan_outfile(["tdci_grad_states_select"], 1)).split(',')]
-        logprint("Grad on states: "+str(gradstates))
-        for i in range(nstates):
-          if i in gradstates:
-              f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
-              forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
-          else:
-              forces.append(np.zeros(3*self.Natoms))  #supply zeros otherwise
-      else:      #gradient of all states
-          logprint("Grad on states: all")
-          for i in range(nstates):
-            f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
-            forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
-
+      #if self.scan_infile(["tdci_grad_states_select"], 1):   #gradient of selected states only
+        #gradstates = [int(string) for string in str(self.scan_outfile(["tdci_grad_states_select"], 1)).split(',')]
+        #logprint("Grad on states: "+str(gradstates))
+        #for i in range(nstates):
+          #if i in gradstates:
+              #f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
+              #forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
+          #else:
+              #forces.append(np.zeros(3*self.Natoms))  #supply zeros otherwise
+      #else:      #gradient of all states
+          #logprint("Grad on states: all")
+      logprint("Grad on states: all")
+      for i in range(nstates):
+        f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
+        forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
+          #for i in range(nstates):
+            #f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
+            #forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
+    #for i in range(nstates):
+      #logprint("Gradient on state "+str(i)+" is "+str(forces[i]))
     return { "grad"       : grad,
              "eng"        : E,
              "states"     : states,
