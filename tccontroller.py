@@ -617,26 +617,23 @@ class job:
     #read forces
     forces=[]
     if str(self.scan_infile(["tdci_grad_states"], 1)) == "yes":  #gradient calulcation 
-      #if self.scan_infile(["tdci_grad_states_select"], 1):   #gradient of selected states only
-        #gradstates = [int(string) for string in str(self.scan_outfile(["tdci_grad_states_select"], 1)).split(',')]
-        #logprint("Grad on states: "+str(gradstates))
-        #for i in range(nstates):
-          #if i in gradstates:
-              #f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
-              #forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
-          #else:
+      if self.scan_infile(["tdci_grad_states_select"], 1):   #gradient of selected states only
+        gradstates = [int(string) for string in str(self.scan_outfile(["tdci_grad_states_select"], 1)).split(',')]
+        logprint("Grad on states: "+str(gradstates))
+        for i in range(nstates):
+          if i in gradstates:
+              f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
+              forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
+          else:
+              forces.append(np.full(3*self.Natoms, np.nan))  #supply nan 
               #forces.append(np.zeros(3*self.Natoms))  #supply zeros otherwise
-      #else:      #gradient of all states
-          #logprint("Grad on states: all")
-      logprint("Grad on states: all")
-      for i in range(nstates):
-        f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
-        forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
-          #for i in range(nstates):
-            #f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
-            #forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
-    #for i in range(nstates):
-      #logprint("Gradient on state "+str(i)+" is "+str(forces[i]))
+              #forces.append(np.full((3*self.Natoms),999999.0))  #supply zeros otherwise
+      else:      #gradient of all states
+          logprint("Grad on states: all")
+          for i in range(nstates):
+            f = open(self.dir+"gradstate"+str(i)+".bin", 'rb')
+            forces.append(read_bin_array(self.dir+"gradstate"+str(i)+".bin",3*self.Natoms))
+
     return { "grad"       : grad,
              "eng"        : E,
              "states"     : states,
@@ -912,7 +909,7 @@ class tccontroller:
     grad_template["tdci_grad_half"] = "no"
     grad_template["tdci_grad_end"] = "no"
     grad_template["tdci_fstrength"] = "0.0"
-    grad_template["tdci_simulation_time"] = "0.01"
+    grad_template["tdci_simulation_time"] = self.config.TIMESTEP_E_AS*1E-3 
     grad_template["tdci_nstep"] = "1"
     grad_template["tdci_krylov_end"] = "no"
     grad_template["tdci_diabatize_orbs"] = "no"
@@ -928,6 +925,29 @@ class tccontroller:
     j.gradjob = True
     j.dir = self.JOBDIR+"electronic/"+str(self.N)+"_grad/"
     self.prevjob = j
+    return j.run_safely()
+
+  #For GRADSELECT - copy of grad routine for previous step force calculation (use separate folder and do not save to prevjob)
+  def tempgrad(self, xyz, ReCn=None, ImCn=None, GradStatesSelect=None):
+    grad_template = copy.deepcopy(self.TDCI_TEMPLATE)
+    # overwrite template to do gradient stuff instead of tdci
+    grad_template["tdci_grad_init"] = "yes"  #we check for its existence
+    grad_template["tdci_grad_half"] = "no"
+    grad_template["tdci_grad_end"] = "no"
+    grad_template["tdci_fstrength"] = "0.0"
+    grad_template["tdci_simulation_time"] = self.config.TIMESTEP_E_AS*1E-3 
+    grad_template["tdci_nstep"] = "1"
+    grad_template["tdci_krylov_end"] = "no"
+    grad_template["tdci_diabatize_orbs"] = "no"
+    grad_template["tdci_grad_states"] = "yes"
+    grad_template["tdci_grad_states_select"] = ','.join([str(x) for x in GradStatesSelect])
+    remove_keys = ["tdci_fieldfile0", "tdci_fieldfile1", "tdci_fieldfile2", 
+                   "tdci_prevorbs_readfile", "tdci_prevcoords_readfile", "tdci_krylov_init"]
+    for key in remove_keys:
+      if key in grad_template: del grad_template[key]
+    j = job(self.N, self.Natoms, self.Nkrylov, ReCn, ImCn, xyz, None, self.JOBDIR, self.JOB_TEMPLATE, grad_template, self.FIELD_INFO, self.config, logger=self.logger, SCHEDULER=self.SCHEDULER)
+    j.gradjob = True
+    j.dir = self.JOBDIR+"electronic/"+str(self.N-1)+"_tempgrad/"
     return j.run_safely()
 
   def hessian(self, xyz, temp):

@@ -41,10 +41,11 @@ class TAB(ehrenfest.Ehrenfest):
       if it == 0:   #initial grad call
           gradout_int = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True)
           grad_select = [i for i in range(len(gradout_int["states"]))] #all gradients were calculated 
-          self.logprint("grad_select is "+str(grad_select))
       else:         #reuse the data from end-of-the-loop call
           gradout_int = deepcopy(gradout)
-          #grad_select = grad_select3
+          if self.tc.config.GRADSELECT:
+            grad_select = deepcopy(grad_select3)
+
       ######store the old population to get its derivatives
       states = gradout_int["states"]
       self.logprint("There are "+str(len(states))+" states")
@@ -85,13 +86,17 @@ class TAB(ehrenfest.Ehrenfest):
       steppop = ((np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2).real
 
       self.logprint("Population after ehrenfest is "+str(steppop))
-      #grad_select2=[i for i in range(3)]
-      #for i in range(len(states)):
-        #if (steppop[i] >= zpop):
-          #grad_select2.append(i)
+
+      if self.tc.config.GRADSELECT: 
+        grad_select2=[]
+        for i in range(len(states)):
+          if (steppop[i] >= zpop*0.5):   #0.5 factor acts as a buffer since the state can cross the threshold by diabatization in the next step
+            grad_select2.append(i)
+      else:
+        grad_select2 = grad_select
 
       #Get gradients x+dx
-      gradout_mid = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True, GradStatesSelect=grad_select)        ###everthing after progpagation before collapsing gradout_mid
+      gradout_mid = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True, GradStatesSelect=grad_select2)        ###everthing after progpagation before collapsing gradout_mid
       ReCn, ImCn = gradout_mid["recn"], gradout_mid["imcn"]
       states = gradout_mid["states"]
       self.logprint("There are "+str(len(states))+" states")
@@ -102,11 +107,17 @@ class TAB(ehrenfest.Ehrenfest):
       self.logprint("There are "+str(len(gradout_mid["forces"]))+ " mid forces")
       aforces = (np.array(gradout_mid["forces"])+np.array(gradout_int["forces"]))/2
       self.logprint("There are "+str(len(aforces))+" state forces")
-      #If state becomes populated, do not average (previous containts zeros) 
-      #newlypopulated = [i for i in grad_select2 if i not in grad_select]       
-      #for i in newlypopulated:
-          #print i,' became populated'
-          #aforces[i] = gradout_mid["forces"][i]
+
+      #If state becomes populated above zpop we need its gradient from the last step for averaging forces
+      if self.tc.config.GRADSELECT:
+        newlypopulated = [i for i in grad_select2 if i not in grad_select and steppop[i] >= zpop]       
+        if newlypopulated:
+          for i in newlypopulated:
+            print i,' became suddenly populated - recalculating x(t-dt) forces'
+          #recalculate force on the previous geometry in separate folder
+          gradout_temp = self.tc.tempgrad(x_prev*bohrtoangs, ReCn_prev, ImCn_prev, GradStatesSelect=newlypopulated)
+          for i in newlypopulated:
+            aforces[i] = (np.array(gradout_mid["forces"][i])+np.array(gradout_temp["forces"][i]))/2 
       
       
       #########---For the restoration of wavefunctions--------#######
@@ -140,7 +151,7 @@ class TAB(ehrenfest.Ehrenfest):
       if (track == 0):
         self.logprint("No collapsing at "+str(it)+" time step")
         gradout = gradout_mid
-        #grad_select3 = grad_select2
+        grad_select3 = grad_select2
       else:
         ###---Restoring the wavefunctions--------#########
         self.logprint("TAB collapsed at"+str(it)+" time step")
@@ -160,28 +171,28 @@ class TAB(ehrenfest.Ehrenfest):
         ImCn = nct.imag
 
         #States populated after collapse, is there a newly poopulated state? 
-        #grad_select3=[i for i in range(3)]
-        #for i in range(len(states)):
-          #if (npop[i] >= zpop):
-            #grad_select3.append(i)
-        #newlypopulated = [i for i in grad_select3 if i not in grad_select2]
-        #for i in newlypopulated:
-          #print i,' became populated after collapse'
-
-        #After collapse calculation
-        gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=False)
-        gradout["forces"]=gradout_mid["forces"]
+        if self.tc.config.GRADSELECT:
+          grad_select3=[]
+          for i in range(len(states)):
+            if (npop[i] >= zpop*0.5):
+              grad_select3.append(i)
+          newlypopulated = [i for i in grad_select3 if i not in grad_select2]
+          for i in newlypopulated:
+            print i,' became populated after collapse'
+          if len(newlypopulated) == 0:
+              gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=False)
+              gradout["forces"]=gradout_mid["forces"] #Reuse state gradients (geometry is unchanged)
+              grad_select3 = [i for i in grad_select2] 
+          else:
+              gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=True,GradStatesSelect=newlypopulated)
+              for i in grad_select2:
+                gradout["forces"][i] = gradout_mid["forces"][i]
+              grad_select3 = grad_select2 + newlypopulated #concatenate arrays
+        else:
+          #After collapse calculation
+          gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=False)
+          gradout["forces"]=gradout_mid["forces"]
         
-        #if len(newlypopulated) == 0:
-            #gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=False)  ###everthing after progpagation after collapsing
-            #gradout["forces"]=gradout_mid["forces"]  #Reuse state gradients (geometry is unchanged)
-            #grad_select3 = [i for i in range(3)] 
-        #else:
-            #gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=True,GradStatesSelect=newlypopulated) ###everthing after progpagation after collapsing + newly populated states gradient
-            #for i in grad_select2:  #Insert already calculated state gradients (geometry is unchanged)
-              #gradout["forces"][i] = gradout_mid["forces"][i]
-            #grad_select3 = grad_select2 + newlypopulated
-  
         ##-----------Resclaing the Momentum to conseve total energy)----------#
         newpote = gradout["eng"]
       
@@ -209,12 +220,15 @@ class TAB(ehrenfest.Ehrenfest):
   def gcollapse(self,dimH,deltatn,aforces,poparray,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale):
         
         import random	
+        import sys
         from scipy.optimize import lsq_linear
         import math
         # Rules ========================================================
 	# i, j, k, l, m, and n are all reserved for integer incrementing
 	
-	random.seed(55555)
+        tseed=time.time()
+        #print('Seed:',tseed)
+	random.seed(tseed)     #Make it as input parameter
 
 	# General setup ================================================
 	npop = np.zeros((dimH)) 	# Stores output electronic populations
@@ -447,7 +461,7 @@ class TAB(ehrenfest.Ehrenfest):
 #                        print Pnc
                         print 'current eseg'
                         print eseg
-                        #sys.exit()
+                        sys.exit()
                 pass
 
                 bcore = []      # block coordinates for fastest decaying elements
