@@ -26,7 +26,7 @@ autimetosec = 2.4188843265857e-17
 class TAB(ehrenfest.Ehrenfest):
   def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
     realtime_start = time.time()  # For benchmarking
-    it = 0
+    it = int(t_init/(self.delta*autimetosec*1e+18))
     t = t_init
     x, v, ReCn, ImCn = x_init, v_init, ReCn_init, ImCn_init
     a = 0.0 # initial acceleration is not used
@@ -34,6 +34,9 @@ class TAB(ehrenfest.Ehrenfest):
     #dcps = 6
     dcps = utils.getdcps(self.atoms)
     self.logprint("dcps are "+str(dcps))
+    if self.tc.config.RESTART:
+      gradout = self.tc.grad(x*bohrtoangs, ReCn, ImCn, DoGradStates=True) #initial grad call for restart
+      grad_select3 = [i for i in range(len(gradout["states"]))] 
     while it < self.tc.config.MAXITERS: # go forever! :D
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
@@ -43,8 +46,7 @@ class TAB(ehrenfest.Ehrenfest):
           grad_select = [i for i in range(len(gradout_int["states"]))] #all gradients were calculated 
       else:         #reuse the data from end-of-the-loop call
           gradout_int = deepcopy(gradout)
-          if self.tc.config.GRADSELECT:
-            grad_select = deepcopy(grad_select3)
+          grad_select = deepcopy(grad_select3)
 
       ######store the old population to get its derivatives
       states = gradout_int["states"]
@@ -197,9 +199,14 @@ class TAB(ehrenfest.Ehrenfest):
         newpote = gradout["eng"]
       
         if (newpote > oldpote+oldkine):
-      	  self.logprint("No enough energy, jump back")
+      	  self.logprint("Not enough energy, jump back")
       	  ##Reverse momentum########---------
           v = -v
+          #Restore WF
+          ReCn, ImCn = gradout_mid["recn"], gradout_mid["imcn"]
+          gradout = gradout_mid
+          grad_select3 = grad_select2
+          newpote = gradout["eng"]
         else:
       	  newkine = oldpote + oldkine - newpote
       	  scale = (newkine/oldkine)**0.50
