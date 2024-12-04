@@ -1,5 +1,5 @@
 # TAB-DMS
-Fully time-dependent non-adiabatic dynamics software that uses Terachem's TDCI as an electronic dynamics driver. Currently can do Ehrenfest dynamics, Collapse-To-A-Block (TAB), but Collapse-To-A-Block in Dense Manifolds of States (TAB-DMS) method coming soon.
+Fully time-dependent non-adiabatic dynamics software that uses Terachem's TDCI as an electronic dynamics driver. Currently can do Ehrenfest dynamics, Collapse-To-A-Block (TAB) and Collapse-To-A-Block in Dense Manifolds of States (TAB-DMS).
 
 
 ## Installation

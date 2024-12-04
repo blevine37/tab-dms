@@ -54,14 +54,17 @@ tc = tccontroller.tccontroller(config, logger=l)
 logprint("TDCI + TAB-DMS")
 
 # Select propagation scheme (Ehrenfest, TAB)
-if config.METHOD == 0:
+if config.TAB == 0:
   ehrenfest_ = ehrenfest.Ehrenfest(config.TIMESTEP_AU, logprint, tc)
   logprint("Propagation scheme: Ehrenfest")
-elif config.METHOD == 1:
+elif config.TAB == 1:
   ehrenfest_ = tab.TAB(config.TIMESTEP_AU, logprint, tc)
-  logprint("Propagation scheme: TAB")
+  if config.krylov_end == False:
+    logprint("Propagation scheme: TAB")
+  else:
+    logprint("Propagation scheme: TAB-DMS")
 else:
-  print("ERROR: Choose valid propagation METHOD!")
+  print("ERROR: Choose valid propagation scheme!")
   sys.exit()
 
 #   get commit number

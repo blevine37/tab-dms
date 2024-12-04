@@ -1,5 +1,5 @@
 
-METHOD = 0 # Ehrenfest = 0, TAB = 1
+TAB = 0 # Ehrenfest = 0, TAB = 1
 
 JOBDIR = "./"
 xyzpath = "benzene_perturbed.xyz"
