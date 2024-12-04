@@ -46,15 +46,24 @@ if os.path.abspath(config.JOBDIR)+"/inputfile.py" != infile:
 
 tc = tccontroller.tccontroller(config, logger=l)
 
-#ehrenfest_ = ehrenfest.TAB(config.TIMESTEP_AU, logprint, tc)
-ehrenfest_ = tab.TAB(config.TIMESTEP_AU, logprint, tc)
-
 
 ########################################
 # Announce and Run Dynamics!
 ########################################
 # Print header
 logprint("TDCI + TAB-DMS")
+
+# Select propagation scheme (Ehrenfest, TAB)
+if config.METHOD == 0:
+  ehrenfest_ = ehrenfest.Ehrenfest(config.TIMESTEP_AU, logprint, tc)
+  logprint("Propagation scheme: Ehrenfest")
+elif config.METHOD == 1:
+  ehrenfest_ = tab.TAB(config.TIMESTEP_AU, logprint, tc)
+  logprint("Propagation scheme: TAB")
+else:
+  print("ERROR: Choose valid propagation METHOD!")
+  sys.exit()
+
 #   get commit number
 #srcpath = os.path.dirname(os.path.realpath(__file__))
 #commit = ""

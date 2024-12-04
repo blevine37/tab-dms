@@ -502,6 +502,7 @@ def lastfolder_sort(element):
 # like TDCI_TEMPLATE options that tccontroller fiddles with.
 class ConfigHandler:
   def __init__(self, config):
+    self.METHOD = config.METHOD
     self.JOBDIR = config.JOBDIR
     self.initial_electronic_state = config.initial_electronic_state
     self.RESTART = config.RESTART
