@@ -1,4 +1,4 @@
-########################################
+#######################################
 # Ehrenfest code for TDCI
 #
 # All calculations are in atomic units (au)
@@ -10,6 +10,7 @@ import numpy as np
 import shutil, os, subprocess, time
 import h5py
 import utils
+from copy import deepcopy
 
 # to install h5py:
 # $ apt install libhdf5-dev
@@ -26,6 +27,9 @@ import utils
 bohrtoangs = 0.529177210903
 # Atomic unit of time to seconds (s)
 autimetosec = 2.4188843265857e-17
+
+
+#######Parameters#######################
 
 
 
@@ -111,6 +115,9 @@ class Ehrenfest:
       x = x / bohrtoangs # cast Initial geometry to Bohr
       self.masses = utils.getmasses(self.atoms)
       v_timestep = np.zeros([len(self.atoms), 3]) # Velocity at t=0
+      if self.tc.config.velpath: # Usesr defined veloc file
+          at, vel = utils.xyz_read(self.tc.config.velpath)
+          v_timestep = vel
       #utils.h5py_update({'atoms': self.atoms})
 
       if self.tc.config.WIGNER_PERTURB: # Perturb according to wigner distribution
@@ -129,11 +136,18 @@ class Ehrenfest:
 
 
       # Call Terachem to Calculate states
-      gradout = self.tc.grad(x*bohrtoangs)
-      t = 0.0
-      recn = gradout["states"][self.tc.config.initial_electronic_state]
-      imcn = np.zeros(len(recn))
-
+      #Initial ReCn ImCn?
+      if self.tc.config.USEC0FILE:
+        print 'Reading initial WF from file'
+        recn, imcn = utils.read_c0files()
+        gradout = self.tc.grad(x*bohrtoangs,recn,imcn)
+        t = 0.0
+      else:
+      #Regular call
+          gradout = self.tc.grad(x*bohrtoangs)
+          t = 0.0
+          recn = gradout["states"][self.tc.config.initial_electronic_state]
+          imcn = np.zeros(len(recn))
 
       a = np.zeros([len(self.atoms), 3]) # Accel at t=0
       v, a, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep

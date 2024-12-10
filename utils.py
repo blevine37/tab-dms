@@ -136,6 +136,31 @@ def getmasses(atoms):
   # Return masses
   return masses
 
+########################################
+# Gaussian width initialization
+########################################
+
+def getdcps(atoms):
+  
+  # Gaussian width used to compute decoherence time constant for TAB
+  # Source: https://doi.org/10.1016/j.chemphys.2010.03.020
+  dcpdata = {}
+  dcpdata['H'] = 4.7
+  dcpdata['C'] = 22.7
+  dcpdata['N'] = 19.0
+  dcpdata['O'] = 12.2
+  dcpdata['F'] = 8.5
+  dcpdata['S'] = 16.7
+  dcpdata['Cl'] = 7.4
+
+  # Build numpy array of Gaussian widths
+  natoms = len(atoms)
+  dcps = np.empty([natoms])
+  for i in range(0, natoms):
+    dcps[i] = dcpdata[atoms[i]]
+
+  # Return Gaussian widths
+  return dcps
 
 
 # Wigner distribution
@@ -251,6 +276,21 @@ def initial_wigner(iseed, x, hessian, masses, temp=0.0):
   print(v)
   return pos, v
 
+#Initialize wavefunction from file
+def read_c0files():
+  try:
+       bytesize = os.path.getsize('ReCn0.bin')
+       cnlen = bytesize/8 #assume stream of doubles
+       f = open('ReCn0.bin', 'rb')
+       recn = np.array(struct.unpack('d'*cnlen, f.read()))
+       f.close()
+       f = open('ImCn0.bin', 'rb')
+       imcn = np.array(struct.unpack('d'*cnlen, f.read()))
+       f.close()
+  except:
+       print 'Something went wrong reading ./ReCn0.bin ./ImCn0.bin'
+       sys.exit()
+  return recn, imcn
 
 
 ########################################
@@ -462,6 +502,7 @@ def lastfolder_sort(element):
 # like TDCI_TEMPLATE options that tccontroller fiddles with.
 class ConfigHandler:
   def __init__(self, config):
+    self.TAB = config.TAB
     self.JOBDIR = config.JOBDIR
     self.initial_electronic_state = config.initial_electronic_state
     self.RESTART = config.RESTART
@@ -483,6 +524,14 @@ class ConfigHandler:
     self.job_template_contents = config.job_template_contents
     self.JOB_TEMPLATE = config.job_template_contents
     self.f0_values = config.f0_values
+    
+    self.USEC0FILE = False #Initial WF 
+    try: self.USEC0FILE = config.USEC0FILE
+    except: pass
+
+    self.GRADSELECT = False #Do not calculate gradient of unpopulated states
+    try: self.GRADSELECT = config.GRADSELECT
+    except: pass 
 
     self.FIX_FOMO = False
     try: self.FIX_FOMO = config.FIX_FOMO
@@ -518,6 +567,8 @@ class ConfigHandler:
 
     self.atoms, self.xyz = xyz_read(config.xyzpath)
     self.xyzpath = config.xyzpath
+    try: self.velpath = config.velpath
+    except: self.velpath = False 
     # TDCI simulation time in femtoseconds
     self.tdci_simulation_time = float(config.TIMESTEP_AU)*autimetosec*1e15 # fs/s
 
@@ -531,6 +582,8 @@ class ConfigHandler:
     TDCI_TEMPLATE["tdci_grad_end"] = "no"
     TDCI_TEMPLATE["tdci_grad_init"] = "no"
     TDCI_TEMPLATE["tdci_grad_half"] = "yes"
+    TDCI_TEMPLATE["tdci_grad_states"] = "no"
+    TDCI_TEMPLATE["tdci_grad_states_select"] = ""
     TDCI_TEMPLATE["tdci_fieldfile0"] = "field0.bin"
     # Krylov subspace options
     TDCI_TEMPLATE["tdci_krylov_end"] = ("yes" if self.krylov_end else "no")

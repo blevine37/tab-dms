@@ -2,6 +2,7 @@
 import sys, os, shutil
 import tccontroller, utils
 import ehrenfest
+import tab
 
 ########################################
 # Read input file
@@ -45,22 +46,34 @@ if os.path.abspath(config.JOBDIR)+"/inputfile.py" != infile:
 
 tc = tccontroller.tccontroller(config, logger=l)
 
-ehrenfest_ = ehrenfest.Ehrenfest(config.TIMESTEP_AU, logprint, tc)
-
-
 
 ########################################
 # Announce and Run Dynamics!
 ########################################
 # Print header
 logprint("TDCI + TAB-DMS")
-#   get commit number
-srcpath = os.path.dirname(os.path.realpath(__file__))
-commit = ""
-with open( srcpath+"/.git/refs/heads/main", 'r') as f:
-  commit = (f.read()).strip()[:8]
 
-logprint("Rev: "+str(commit))
+# Select propagation scheme (Ehrenfest, TAB)
+if config.TAB == 0:
+  ehrenfest_ = ehrenfest.Ehrenfest(config.TIMESTEP_AU, logprint, tc)
+  logprint("Propagation scheme: Ehrenfest")
+elif config.TAB == 1:
+  ehrenfest_ = tab.TAB(config.TIMESTEP_AU, logprint, tc)
+  if config.krylov_end == False:
+    logprint("Propagation scheme: TAB")
+  else:
+    logprint("Propagation scheme: TAB-DMS")
+else:
+  print("ERROR: Choose valid propagation scheme!")
+  sys.exit()
+
+#   get commit number
+#srcpath = os.path.dirname(os.path.realpath(__file__))
+#commit = ""
+#with open( srcpath+"/.git/refs/heads/main", 'r') as f:
+  #commit = (f.read()).strip()[:8]
+
+#logprint("Rev: "+str(commit))
 
 if config.WIGNER_PERTURB:
   logprint("Wigner Random Seed: "+str(config.WIGNER_SEED))

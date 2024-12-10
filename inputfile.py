@@ -1,8 +1,9 @@
 
-
+TAB = 0 # Ehrenfest = 0, TAB = 1
 
 JOBDIR = "./"
 xyzpath = "benzene_perturbed.xyz"
+velpath = ""
 initial_electronic_state = 0  # S0 = 0, S1 = 1, etc.
 
 RESTART = False
@@ -23,6 +24,7 @@ WIGNER_SEED = random.randint(0, 2**32-1)     # Random seed for Wigner distributi
 # If you already ran a Hessian calculation, you can include the path to the Hessian.bin to skip the freq calculation
 HESSIAN_FILE = None
 
+SCHEDULER = False
 
 ########################################
 # TDCI TeraChem Template
