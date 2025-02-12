@@ -338,6 +338,32 @@ class job:
     if os.path.exists(self.dir):
       shutil.rmtree(self.dir)
 
+  def delete_files(self, delete_except):
+    #Permanently deleting N-1 numbered directory with the same name
+    import re
+    parent_dir=os.path.dirname(self.dir.rstrip('/')) # electronic folder path
+    match = re.match(r"(\d+)(_.*)?/?", os.path.basename(self.dir.rstrip('/'))) # leading number and optional suffix
+    n = int(match.group(1))  # Extract the number
+    suffix = match.group(2) or "" # optional _grad 
+    if n >= 1:
+      dirname=str(parent_dir)+'/'+str(n-1)+str(suffix)
+      if n == 1 and not suffix:
+        dirname=str(parent_dir)+'/0h0'
+      if os.path.exists(dirname):
+        #if delete_except containts files to save 
+        if delete_except:
+          for root, dirs, files in os.walk(dirname):
+            for file in files:
+              file_path = os.path.join(root, file)
+              if file not in delete_except:
+                os.remove(file_path)
+                print("File deleted: ",file,file_path)
+        else:
+          shutil.rmtree(dirname)
+          print("Folder deleted:",dirname)
+    else:
+         print("Step N < 1; not deleting anything yet")
+
   def make_fieldfiles(self):
     # Field file should include values for half-steps, so the length of the array
     #   should be 2*nsteps!
@@ -483,6 +509,9 @@ class job:
 
       if type(output) is dict: # Everything checks out!
         logprint("Output looks good!")
+        #Delete old files
+        if self.config.DELETE_STEPFILES:
+          self.delete_files(self.config.DELETE_EXCEPT)
         return output
 
       else: # Outputs bad, try redoing the job!
@@ -856,6 +885,7 @@ class tccontroller:
     self.RESTART = config.RESTART
     #if self.RESTART:
     #  self.restart()
+    self.DELETE_STEPFILES = config.DELETE_STEPFILES
 
   # Prepare for restarting the dynamics simulation partway through
   #   Need to populate self.prevjob so orbital diabatization takes place

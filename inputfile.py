@@ -26,6 +26,9 @@ HESSIAN_FILE = None
 
 SCHEDULER = False
 
+DELETE_STEPFILES = True                 # Delete step files after execution
+DELETE_EXCEPT = []                      # Except this list (e.g., ['tc.out','norm','Pop']
+
 ########################################
 # TDCI TeraChem Template
 ########################################

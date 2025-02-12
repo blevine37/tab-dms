@@ -509,7 +509,7 @@ class ConfigHandler:
     if self.RESTART: # Shouldnt need to include them if you're not restarting.
       if (config.restart_frame is True): # Auto-detect
         lf = lastfolder(self.JOBDIR+"electronic/")
-        self.restart_frame = int(lf.split("/")[-1])-2 # Two before last detected folder to be safe...
+        self.restart_frame = int(lf.split("/")[-1])-1 # One before last detected folder to be safe...
       else:
         self.restart_frame = config.restart_frame
       self.restart_hdf5 = config.restart_hdf5
@@ -563,6 +563,15 @@ class ConfigHandler:
     self.HESSIAN_FILE = None
     try:
       self.HESSIAN_FILE = config.HESSIAN_FILE
+    except: pass
+
+    self.DELETE_STEPFILES = False
+    self.DELETE_EXCEPT = []
+    try:
+      self.DELETE_STEPFILES = config.DELETE_STEPFILES
+    except: pass
+    try:
+      self.DELETE_EXCEPT = config.DELETE_EXCEPT
     except: pass
 
     self.atoms, self.xyz = xyz_read(config.xyzpath)

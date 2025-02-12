@@ -54,7 +54,7 @@ class TAB(ehrenfest.Ehrenfest):
       ReCn, ImCn = gradout_int["recn"], gradout_int["imcn"]
       
       oldpop = ((np.dot(ReCn, np.transpose(states)))**2 + (np.dot(ImCn, np.transpose(states)))**2).real # ~adiabatic populations in "states"-basis
-      self.logprint("Popluation before ehrenfest is "+str(oldpop)) 
+      self.logprint("Population before ehrenfest is "+str(oldpop))
       #oldpote = gradout_int["eng"]
       #oldkine = self.ke_calc(v)  #Kinetic energy before Ehrenfest
       
