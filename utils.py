@@ -311,6 +311,10 @@ def h5py_update(data):
     ndets = len(data['recn_half'])
   except:
    pass
+  try:
+    nstates = len(data['pop'])
+  except:
+    nstates = 0
 
   # Open h5py file
   h5f = h5py.File('data.hdf5', 'a')
@@ -328,6 +332,8 @@ def h5py_update(data):
     h5f.create_dataset('a', (0, n, 3), maxshape=(None, n, 3), dtype='float64')
     h5f.create_dataset('pe', (0,), maxshape=(None,), dtype='float64')
     h5f.create_dataset('ke', (0,), maxshape=(None,), dtype='float64')
+    h5f.create_dataset('norm', (0,), maxshape=(None,), dtype='float64')
+    h5f.create_dataset('pop', (0, nstates), maxshape=(None, nstates), dtype='float64')
     h5f.create_dataset('time', (0,), maxshape=(None,), dtype='float64')
 
   if (('recn_half' in data.keys()) and ('recn_half' not in h5f.keys())):
@@ -385,6 +391,7 @@ def h5py_copy_partial(oldh5f, lastframe, config):
   maxn = oldh['x'].shape[0]
   natoms = oldh['x'].shape[1]
   ndets = oldh['recn_half'].shape[1]
+  nstates = oldh['pop'].shape[1]
 
   if maxn < lastframe:
     raise ValueError('Tried to restart on frame '+str(lastframe)+', but '+str(oldh5f)+' only has '+str(maxn)+' frames.')
@@ -402,6 +409,8 @@ def h5py_copy_partial(oldh5f, lastframe, config):
   h5f.create_dataset('a', (lastframe, n, 3), maxshape=(None, n, 3), dtype='float64')
   h5f.create_dataset('pe', (lastframe,), maxshape=(None,), dtype='float64')
   h5f.create_dataset('ke', (lastframe,), maxshape=(None,), dtype='float64')
+  h5f.create_dataset('norm', (lastframe,), maxshape=(None,), dtype='float64')
+  h5f.create_dataset('pop', (lastframe, nstates), maxshape=(None, nstates), dtype='float64')
   h5f.create_dataset('time', (lastframe,), maxshape=(None,), dtype='float64')
 
   h5f.create_dataset('recn_half', (lastframe, ndets), maxshape=(None, ndets), dtype='float64')

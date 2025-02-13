@@ -54,6 +54,16 @@ class Ehrenfest:
     # Return accelerations
     return accs
 
+  def getNormPop(self, states, ReCn, ImCn):
+    norm = np.sum( np.array(ReCn)**2 )
+    if ImCn is not None:
+      norm += np.sum( np.array(ImCn)**2 )
+
+    ReCn_states = np.dot(ReCn,np.transpose(states))
+    ImCn_states = np.dot(ImCn,np.transpose(states))
+    pop = ReCn_states**2.0.real + ImCn_states**2.0.real
+    return norm, pop
+
   def ke_calc(self, v):
     print(v)
     ke = 0 # Initialize energy variable
@@ -62,13 +72,15 @@ class Ehrenfest:
       ke += m_i * v_i.dot(v_i) / 2
     return ke
 
-  def savestate(self, x, v, v_half, a, t, TCdata, atoms=None):
+  def savestate(self, x, v, v_half, a, norm, pop, t, TCdata, atoms=None):
     # Update HDF5
     data = { 'x'         : x,
              'v'         : v,
              'v_half'    : v_half,
              'a'         : a,
              'ke'        : self.ke_calc(v),
+             'norm'      : norm,
+             'pop'       : pop,
              'time'      : t,
               }
     if TCdata is None:
@@ -150,8 +162,8 @@ class Ehrenfest:
           imcn = np.zeros(len(recn))
 
       a = np.zeros([len(self.atoms), 3]) # Accel at t=0
-      v, a, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep
-      self.savestate(x, v_timestep, v, a, t, TCdata, atoms=self.atoms) # Save initial state
+      v, a, norm, pop, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep
+      self.savestate(x, v_timestep, v, a, norm, pop, t, TCdata, atoms=self.atoms) # Save initial state
 
     self.propagate(x, v, t, recn, imcn)
     
@@ -176,9 +188,9 @@ class Ehrenfest:
     while it < self.tc.config.MAXITERS: # main loop!
       t += self.delta * autimetosec * 1e+18 # Time in Attoseconds
       x_prev, v_prev, ReCn_prev, ImCn_prev, TCdata_prev = x, v, ReCn, ImCn, TCdata
-      x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
+      x, v_timestep, v, a, norm, pop, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
       ReCn, ImCn = TCdata["recn"], TCdata["imcn"]
-      self.savestate(x, v_timestep, v, a, t, TCdata)
+      self.savestate(x, v_timestep, v, a, norm, pop, t, TCdata)
       self.logprint("Iteration " + str(it).zfill(4) + " finished")
       it+=1
     self.logprint("Completed Ehrenfest Propagation!")
@@ -198,6 +210,8 @@ class Ehrenfest:
   #  v_timestep : Velocity at time t
   #  v_next     : Velocity at time t+(dt/2)
   #  a          : Acceleration at time t
+  #  norm       : WF norm
+  #  pop        : Electronic populations in adiabatic basis
   #  TCdata     : Return dictionary from tccontroller TDCI job from t-(dt/2) to t+(dt/2)
   def step(self, x, v, ReCn=None, ImCn=None):
     x_next = x + v*self.delta
@@ -205,7 +219,8 @@ class Ehrenfest:
     a = self.getAccel(TCdata["grad_half"], TCdata["recn"], TCdata["imcn"])
     v_timestep = v + a*self.delta/2.
     v_next = v + a*self.delta
-    return x_next, v_timestep, v_next, a, TCdata
+    norm, pop = self.getNormPop(TCdata["states"], TCdata["recn"], TCdata["imcn"])
+    return x_next, v_timestep, v_next, a, norm, pop, TCdata
     
   # Input:
   #  x      : Coordinates at time t
@@ -213,11 +228,14 @@ class Ehrenfest:
   # Output: 
   #  v_next : Velocity at time t+(dt/2)
   #  a      : Acceleration at time t
+  #  norm       : WF norm
+  #  pop        : Electronic populations in adiabatic basis
   #  TCdata : Return dictionary from tccontroller TDCI job from t to t+(dt/2)
   def halfstep(self, x, v, ReCn=None, ImCn=None):
     TCdata = self.tc.halfstep(x*bohrtoangs, ReCn=ReCn, ImCn=ImCn) # Do TDCI! \(^0^)/
     a = self.getAccel(TCdata["grad_end"], TCdata["recn"], TCdata["imcn"])
     print((v, a, self.delta))
     v_next = v + a*self.delta/2.
-    return v_next, a, TCdata
+    norm, pop = self.getNormPop(TCdata["states"], TCdata["recn"], TCdata["imcn"])
+    return v_next, a, norm, pop, TCdata
 

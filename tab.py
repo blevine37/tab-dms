@@ -59,7 +59,7 @@ class TAB(ehrenfest.Ehrenfest):
       #oldkine = self.ke_calc(v)  #Kinetic energy before Ehrenfest
       
       #### Ehrenfest-TDCI propagation ######################
-      x, v_timestep, v, a, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
+      x, v_timestep, v, a, stepnorm, steppop, TCdata = self.step(x, v, ReCn=ReCn, ImCn=ImCn) # Do propagation step
       
       oldpote = TCdata["eng"] 
       oldkine = self.ke_calc(v)  #Kinetic energy after Ehrenfest
@@ -215,8 +215,8 @@ class TAB(ehrenfest.Ehrenfest):
           v *= scale 
       	  TCdata["recn"] = ReCn
       	  TCdata["imcn"] = ImCn
-      
-      self.savestate(x, v_timestep, v, a, t, TCdata)
+      norm, pop = self.getNormPop(TCdata["states"], TCdata["recn"], TCdata["imcn"])
+      self.savestate(x, v_timestep, v, a, norm, pop, t, TCdata)
       self.logprint("Iteration " + str(it).zfill(4) + " finished")
       it+=1
     self.logprint("Completed TAB Propagation!")
