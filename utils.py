@@ -369,6 +369,9 @@ def h5py_copy_partial(oldh5f, lastframe, config):
   dirpath = os.path.dirname(oldh5f)
   rename_legacy(dirpath)
   if dirpath != "": dirpath=dirpath+"/"
+  if not os.path.exists(oldh5f):
+    print("Restart file not found!") 
+    sys.exit()
   if os.path.exists(dirpath+"data.hdf5"):
      shutil.move(dirpath+"data.hdf5", dirpath+"data_old.hdf5")
   if os.path.basename(oldh5f) == "data.hdf5":
@@ -445,12 +448,12 @@ def h5py_copy_partial(oldh5f, lastframe, config):
                        'cp '+newjob_old+"tc.in "+newjob_dir+"/tc.in ;", shell=True)
   p.wait()
   
-  x = xyz_read(prevjob_dir+"/temp.xyz")[1]/bohrtoangs
+  x = np.array(h5f['x'][lastframe-1]) #xyz_read(prevjob_dir+"/temp.xyz")[1]/bohrtoangs
   v_half = np.array(h5f['v_half'][lastframe-1])
   a = np.array(h5f['a'][lastframe-1])
   t = float(h5f['time'][lastframe-1])
-  recn = None # Ugh we're not storing recn_end in hdf5...
-  imcn = None
+  recn = h5f['recn_half'][lastframe-1] #for TAB this is recn_init of the last grad 
+  imcn = h5f['imcn_half'][lastframe-1]  
   atoms = list(h5f['atoms'][0])
   oldh.close()
   h5f.close()
@@ -507,12 +510,15 @@ class ConfigHandler:
     self.initial_electronic_state = config.initial_electronic_state
     self.RESTART = config.RESTART
     if self.RESTART: # Shouldnt need to include them if you're not restarting.
+      self.restart_hdf5 = config.restart_hdf5
       if (config.restart_frame is True): # Auto-detect
-        lf = lastfolder(self.JOBDIR+"electronic/")
-        self.restart_frame = int(lf.split("/")[-1])-1 # One before last detected folder to be safe...
+        #lf = lastfolder(self.JOBDIR+"electronic/")
+        #self.restart_frame = int(lf.split("/")[-1])-1 # One before last detected folder to be safe...
+        h5fr = h5py.File(self.restart_hdf5, 'r')
+        self.restart_frame = int(h5fr['x'].shape[0])-1
+        h5fr.close()
       else:
         self.restart_frame = config.restart_frame
-      self.restart_hdf5 = config.restart_hdf5
     self.SCHEDULER = config.SCHEDULER
     self.TERACHEM = config.TERACHEM
     self.TIMESTEP_AU = config.TIMESTEP_AU # Dynamics time step in atomic units
