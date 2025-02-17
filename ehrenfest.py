@@ -103,9 +103,10 @@ class Ehrenfest:
     self.logprint("Updating HDF5")
     utils.h5py_update(data)
 
-  def loadstate(self):
+  def loadstate(self, N = None):
     config = self.tc.config
-    N = int(config.restart_frame) # Restart at frame N
+    if N is None:
+      N = int(config.restart_frame) # Restart at frame N
     # Create a new hdf5 file with steps 0,...,N-1, and then restart calculation with frame N.
     x_, v_half_, a_, t_, recn_, imcn_, self.atoms = utils.h5py_copy_partial(config.restart_hdf5, config.restart_frame, config)
     time.sleep(2) # Wait a sec to make sure IO operations are done.
@@ -177,6 +178,10 @@ class Ehrenfest:
   # ImCn_init : Imaginary CI Vector at time t+(dt/2)
   # 
   def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
+    if self.tc.config.RESTART:
+      print("Recalculating orbitals of previous geometry (required for diabatization)")
+      x_prev, v_prev, a_prev, t_prev, recn_prev, imcn_prev = self.loadstate(N=int(self.tc.config.restart_frame)-1)
+      gradout = self.tc.grad(x_prev*bohrtoangs,recn_prev,imcn_prev,DoGradStates=False)
     realtime_start = time.time()  # For benchmarking
     t = t_init
     it = int(t_init/(self.delta*autimetosec*1e+18))
