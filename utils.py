@@ -589,6 +589,10 @@ class ConfigHandler:
       self.DELETE_EXCEPT = config.DELETE_EXCEPT
     except: pass
 
+    self.PASS_HF_GUESS = False
+    try: self.PASS_HF_GUESS = config.PASS_HF_GUESS
+    except: pass
+
     self.atoms, self.xyz = xyz_read(config.xyzpath)
     self.xyzpath = config.xyzpath
     try: self.velpath = config.velpath
@@ -600,6 +604,7 @@ class ConfigHandler:
     tdci_simulation_time = self.tdci_simulation_time
     TDCI_TEMPLATE["coordinates"] = "temp.xyz"
     TDCI_TEMPLATE["run"] = "tdci"
+    TDCI_TEMPLATE["guess"] = "generate"
     TDCI_TEMPLATE["tdci_simulation_time"] = str(self.tdci_simulation_time)
     TDCI_TEMPLATE["tdci_nstep"] = str(self.nstep)
     TDCI_TEMPLATE["tdci_nfields"] = str(self.nfields)

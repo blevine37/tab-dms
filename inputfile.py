@@ -29,6 +29,8 @@ SCHEDULER = False
 DELETE_STEPFILES = True                 # Delete step files after execution
 DELETE_EXCEPT = []                      # Except this list (e.g., ['tc.out','norm','Pop']
 
+PASS_HF_GUESS = True                    # Use previous HF orbitals as guess if available
+
 ########################################
 # TDCI TeraChem Template
 ########################################

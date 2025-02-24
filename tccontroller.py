@@ -77,7 +77,7 @@ def xyz_read(filename):
 # before writing them as a file
 def dictkey(key):
   keylist = ["gpus", "timings", "precision", "threall", "convthre", "basis", 
-             "coordinates", "method", "run", "to", "charge", "spinmult", "csf_basis",
+             "coordinates", "method", "run", "to", "charge", "spinmult", "guess", "csf_basis",
              "tdci_simulation_time", "tdci_nstep", "tdci_eshift", "tdci_stepprint",
              "tdci_nfields", "tdci_laser_freq", "tdci_photoneng", "tdci_fstrength",
              "tdci_fdirection", "tdci_ftype", "tdci_corrfn_t", "tdci_write_field",
@@ -302,6 +302,19 @@ class job:
     #tempname = "test"+str(self.n)+".in"
     tempname = "tc.in"
     dict_to_file(TDCI_TEMPLATE, self.dir+"/"+tempname)
+
+    if self.config.PASS_HF_GUESS and self.n > 0:
+      xyzname = "temp"
+      pscrdir = self.JOBDIR + "electronic/" + str(self.n-1) + "/scr."+xyzname+"/" #N-1 TDCI folder
+      if self.n == 1:
+        pscrdir = self.JOBDIR + "electronic/0h0/scr."+xyzname+"/"
+      try:
+        shutil.copy(pscrdir+"/c0", self.dir+"/prevc0")
+        search_replace_file(self.dir+tempname, "guess generate", "guess ./prevc0")
+        print("Copying HF orbital guess from: ",pscrdir+"c0")
+      except:
+        print("HF orbital guess not found:",pscrdir+"c0")
+
     if self.gradjob: # Fieldfiles
       pass
     else:
@@ -339,15 +352,15 @@ class job:
       shutil.rmtree(self.dir)
 
   def delete_files(self, delete_except):
-    #Permanently deleting N-1 numbered directory with the same name
+    #Permanently deleting N-2 numbered directory with the same name
     import re
     parent_dir=os.path.dirname(self.dir.rstrip('/')) # electronic folder path
     match = re.match(r"(\d+)(_.*)?/?", os.path.basename(self.dir.rstrip('/'))) # leading number and optional suffix
     n = int(match.group(1))  # Extract the number
     suffix = match.group(2) or "" # optional _grad 
-    if n >= 1:
-      dirname=str(parent_dir)+'/'+str(n-1)+str(suffix)
-      if n == 1 and not suffix:
+    if n >= 2:
+      dirname=str(parent_dir)+'/'+str(n-2)+str(suffix)
+      if n == 2 and not suffix:
         dirname=str(parent_dir)+'/0h0'
       if os.path.exists(dirname):
         #if delete_except containts files to save 
@@ -362,7 +375,7 @@ class job:
           shutil.rmtree(dirname)
           print("Folder deleted:",dirname)
     else:
-         print("Step N < 1; not deleting anything yet")
+         print("Step N < 2; not deleting anything yet")
 
   def make_fieldfiles(self):
     # Field file should include values for half-steps, so the length of the array
