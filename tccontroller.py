@@ -903,16 +903,20 @@ class tccontroller:
   # Prepare for restarting the dynamics simulation partway through
   #   Need to populate self.prevjob so orbital diabatization takes place
   #   start job with noclean so that we can use the files setup by reading hdf5
-  def restart_setup(self):
+  def restart_setup_eh(self):
     self.FIELD_INFO["half"] = 1 
+    #check if previous folder with required files exist
+    required_files = ["NewCoors.bin", "NewC.bin", "ReCn_end.bin", "ImCn_end.bin"]
+    rdir = self.JOBDIR+"electronic/"+str(self.N-1)+"/"
+    if not all(os.path.exists(os.path.join(rdir, file)) for file in required_files):
+      return 1
     print("Setting prevjob: "+str(self.N-1))
     xyz = np.zeros((self.Natoms,3)) # need one to make a job instance, should be fine since we're not running it.
     j = job( self.N-1, self.Natoms, self.Nkrylov, None, None, xyz, 
 	     None, self.JOBDIR, self.JOB_TEMPLATE, self.TDCI_TEMPLATE, self.FIELD_INFO, 
 	     self.config, logger=self.logger, SCHEDULER=self.SCHEDULER, noclean=True )
     self.prevjob = j
-    
-    
+    return 0
 
   # find the last valid TDCI calculation for continuity, return step number.
   # This function isn't used anywhere in the codebase right now.

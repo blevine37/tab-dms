@@ -520,6 +520,9 @@ class ConfigHandler:
     self.RESTART = config.RESTART
     if self.RESTART: # Shouldnt need to include them if you're not restarting.
       self.restart_hdf5 = config.restart_hdf5
+      if not os.path.exists(self.restart_hdf5):
+        print("Restart file not found!") 
+        sys.exit()
       if (config.restart_frame is True): # Auto-detect
         #lf = lastfolder(self.JOBDIR+"electronic/")
         #self.restart_frame = int(lf.split("/")[-1])-1 # One before last detected folder to be safe...

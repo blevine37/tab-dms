@@ -111,7 +111,6 @@ class Ehrenfest:
     x_, v_half_, a_, t_, recn_, imcn_, self.atoms = utils.h5py_copy_partial(config.restart_hdf5, config.restart_frame, config)
     time.sleep(2) # Wait a sec to make sure IO operations are done.
     self.tc.N = config.restart_frame
-    self.tc.restart_setup() # Prepare tccontroller for running from a restart
     print(( x_, v_half_, a_, t_, recn_, imcn_))
     return x_, v_half_, a_, t_, recn_, imcn_
     
@@ -179,9 +178,11 @@ class Ehrenfest:
   # 
   def propagate(self, x_init, v_init, t_init, ReCn_init, ImCn_init=None):
     if self.tc.config.RESTART:
-      print("Recalculating orbitals of previous geometry (required for diabatization)")
-      x_prev, v_prev, a_prev, t_prev, recn_prev, imcn_prev = self.loadstate(N=int(self.tc.config.restart_frame)-1)
-      gradout = self.tc.grad(x_prev*bohrtoangs,recn_prev,imcn_prev,DoGradStates=False)
+      restart_setup = self.tc.restart_setup_eh() #Look for N-1 folder and set it as prevjob
+      if restart_setup != 0:
+        self.logprint("N-1 calculation NOT found. Recalculating orbitals of previous geometry (required for diabatization)")
+        x_prev, v_prev, a_prev, t_prev, recn_prev, imcn_prev = self.loadstate(N=int(self.tc.config.restart_frame)-1)
+        gradout = self.tc.grad(x_prev*bohrtoangs,recn_prev,imcn_prev,DoGradStates=False)
     realtime_start = time.time()  # For benchmarking
     t = t_init
     it = int(t_init/(self.delta*autimetosec*1e+18))
