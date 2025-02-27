@@ -899,6 +899,7 @@ class tccontroller:
     #if self.RESTART:
     #  self.restart()
     self.DELETE_STEPFILES = config.DELETE_STEPFILES
+    self.TAB_SEED = config.TAB_SEED
 
   # Prepare for restarting the dynamics simulation partway through
   #   Need to populate self.prevjob so orbital diabatization takes place

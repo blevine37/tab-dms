@@ -10,6 +10,7 @@ import shutil, os, subprocess, time
 import h5py
 import utils
 import math
+import random
 
 from copy import deepcopy
 
@@ -226,16 +227,15 @@ class TAB(ehrenfest.Ehrenfest):
     self.logprint("Simulated "+str(time_simulated)+" fs with "+str(it)+" steps in "+realtime+" Real time.")
   def gcollapse(self,dimH,deltatn,aforces,poparray,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale):
         
-        import random	
         import sys
         from scipy.optimize import lsq_linear
         import math
         # Rules ========================================================
 	# i, j, k, l, m, and n are all reserved for integer incrementing
 	
-        tseed=time.time()
+        #tseed=time.time()
         #print('Seed:',tseed)
-	random.seed(tseed)     #Make it as input parameter
+	#random.seed(tseed)     #Make it as input parameter
 
 	# General setup ================================================
 	npop = np.zeros((dimH)) 	# Stores output electronic populations
@@ -677,7 +677,6 @@ class TAB(ehrenfest.Ehrenfest):
   def rstates(self,dimH,eseg,bcore,nzthresh):
 	import numpy as np
 	import sys
-	import random
 
 	icstates = [] 	# list of unique states that have been found to have 0 elements
 			# in eseg in line with the current bcore element

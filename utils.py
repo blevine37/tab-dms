@@ -320,9 +320,9 @@ def h5py_update(data):
   h5f = h5py.File('data.hdf5', 'a')
 
   # Create datasets
+  str_dtype = h5py.special_dtype(vlen=str)
   if 'atoms' not in h5f.keys():
 
-    str_dtype = h5py.special_dtype(vlen=str)
     h5f.create_dataset('atoms', (1, n), maxshape=(1, n), dtype=str_dtype)
 
     h5f.create_dataset('tdci_dir', (0,), maxshape=(None,), dtype=str_dtype)
@@ -336,11 +336,13 @@ def h5py_update(data):
     h5f.create_dataset('pop', (0, nstates), maxshape=(None, nstates), dtype='float64')
     h5f.create_dataset('time', (0,), maxshape=(None,), dtype='float64')
 
-  if (('recn_half' in data.keys()) and ('recn_half' not in h5f.keys())):
     ndets = len(data['recn_half'])
-    h5f.create_dataset('recn_half', (1, ndets), maxshape=(None, ndets), dtype='float64')
-    h5f.create_dataset('imcn_half', (1, ndets), maxshape=(None, ndets), dtype='float64')
+    h5f.create_dataset('recn_half', (0, ndets), maxshape=(None, ndets), dtype='float64')
+    h5f.create_dataset('imcn_half', (0, ndets), maxshape=(None, ndets), dtype='float64')
 
+    # Optional
+    if ('random_state' in data.keys()):
+      h5f.create_dataset('random_state', (0,), maxshape=(None,), dtype=str_dtype)
 
   static_keys = ['atoms']
   for key in h5f.keys():
@@ -416,6 +418,10 @@ def h5py_copy_partial(oldh5f, lastframe, config):
   h5f.create_dataset('recn_half', (lastframe, ndets), maxshape=(None, ndets), dtype='float64')
   h5f.create_dataset('imcn_half', (lastframe, ndets), maxshape=(None, ndets), dtype='float64')
 
+  #Optional keys
+  if 'random_state' in oldh.keys():
+    h5f.create_dataset('random_state', (lastframe,), maxshape=(None,), dtype=str_dtype)
+
   # Copy data
   #static_keys = ['atoms', 'tdci_dir']
   static_keys = ['atoms']
@@ -464,10 +470,14 @@ def h5py_copy_partial(oldh5f, lastframe, config):
   recn = h5f['recn_half'][lastframe-1] #for TAB this is recn_init of the last grad 
   imcn = h5f['imcn_half'][lastframe-1]  
   atoms = list(h5f['atoms'][0])
+  if 'random_state' in oldh.keys():
+    random_state = eval(h5f['random_state'][lastframe-1])
+  else:
+    random_state = None
   oldh.close()
   h5f.close()
   time.sleep(1)
-  return x, v_half, a, t, recn, imcn, atoms
+  return x, v_half, a, t, recn, imcn, atoms, random_state
 
 def h5py_printall():
 
@@ -594,6 +604,10 @@ class ConfigHandler:
 
     self.PASS_HF_GUESS = False
     try: self.PASS_HF_GUESS = config.PASS_HF_GUESS
+    except: pass
+
+    self.TAB_SEED = False
+    try: self.TAB_SEED = int(config.TAB_SEED)
     except: pass
 
     self.atoms, self.xyz = xyz_read(config.xyzpath)

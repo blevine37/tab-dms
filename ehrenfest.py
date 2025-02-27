@@ -11,6 +11,7 @@ import shutil, os, subprocess, time
 import h5py
 import utils
 from copy import deepcopy
+import random
 
 # to install h5py:
 # $ apt install libhdf5-dev
@@ -100,6 +101,10 @@ class Ehrenfest:
 
     if atoms is not None:
       data['atoms'] = atoms
+
+    if self.tc.config.TAB > 0:
+      data['random_state'] = repr(random.getstate())
+
     self.logprint("Updating HDF5")
     utils.h5py_update(data)
 
@@ -108,18 +113,35 @@ class Ehrenfest:
     if N is None:
       N = int(config.restart_frame) # Restart at frame N
     # Create a new hdf5 file with steps 0,...,N-1, and then restart calculation with frame N.
-    x_, v_half_, a_, t_, recn_, imcn_, self.atoms = utils.h5py_copy_partial(config.restart_hdf5, config.restart_frame, config)
+    x_, v_half_, a_, t_, recn_, imcn_, self.atoms, random_state = utils.h5py_copy_partial(config.restart_hdf5, config.restart_frame, config)
     time.sleep(2) # Wait a sec to make sure IO operations are done.
     self.tc.N = config.restart_frame
     print(( x_, v_half_, a_, t_, recn_, imcn_))
-    return x_, v_half_, a_, t_, recn_, imcn_
-    
+    return x_, v_half_, a_, t_, recn_, imcn_, random_state
+
+  def tabseed(self, seed = None, random_state = None): #Random seed
+    if self.tc.config.TAB > 0:
+      if random_state: #If state available in restart file
+        random.setstate(random_state)
+        self.logprint("Random seed: state loaded from restart file.")
+      elif seed: #If defined in inputfile
+        tabseed = seed
+        random.seed(tabseed)
+        self.logprint("Random seed (from inputfile): "+str(tabseed))
+      else: #Default to unix time
+        import time
+        tabseed = int(time.time())
+        random.seed(tabseed)
+        self.logprint("Random seed (generated): "+str(tabseed))
+      self.logprint("")
+
   # Prepare initial state and start propagation.
   def run_ehrenfest(self):
     x, v, v_timestep, a, pe, recn, imcn = None, None, None, None, None, None, None
     t = 0
     if self.tc.config.RESTART:
-      x, v, a, t, recn, imcn = self.loadstate()
+      x, v, a, t, recn, imcn, random_state = self.loadstate()
+      self.tabseed(random_state=random_state)
     else:
       utils.clean_files(self.tc.config.JOBDIR) # Clean job directory
       geomfilename = self.tc.config.xyzpath # .xyz filename in job directory
@@ -130,7 +152,6 @@ class Ehrenfest:
       if self.tc.config.velpath: # Usesr defined veloc file
           at, vel = utils.xyz_read(self.tc.config.velpath)
           v_timestep = vel
-      #utils.h5py_update({'atoms': self.atoms})
 
       if self.tc.config.WIGNER_PERTURB: # Perturb according to wigner distribution
         TCdata = None
@@ -146,7 +167,6 @@ class Ehrenfest:
         print(x)
         utils.xyz_write(self.atoms, x*bohrtoangs, "wigner_output.xyz")
 
-
       # Call Terachem to Calculate states
       #Initial ReCn ImCn?
       if self.tc.config.USEC0FILE:
@@ -160,6 +180,8 @@ class Ehrenfest:
           t = 0.0
           recn = gradout["states"][self.tc.config.initial_electronic_state]
           imcn = np.zeros(len(recn))
+      
+      self.tabseed(seed=self.tc.config.TAB_SEED)
 
       a = np.zeros([len(self.atoms), 3]) # Accel at t=0
       v, a, norm, pop, TCdata = self.halfstep(x, v_timestep, recn, imcn) # Do TDCI halfstep
@@ -181,7 +203,7 @@ class Ehrenfest:
       restart_setup = self.tc.restart_setup_eh() #Look for N-1 folder and set it as prevjob
       if restart_setup != 0:
         self.logprint("N-1 calculation NOT found. Recalculating orbitals of previous geometry (required for diabatization)")
-        x_prev, v_prev, a_prev, t_prev, recn_prev, imcn_prev = self.loadstate(N=int(self.tc.config.restart_frame)-1)
+        x_prev, v_prev, a_prev, t_prev, recn_prev, imcn_prev, _ = self.loadstate(N=int(self.tc.config.restart_frame)-1)
         gradout = self.tc.grad(x_prev*bohrtoangs,recn_prev,imcn_prev,DoGradStates=False)
     realtime_start = time.time()  # For benchmarking
     t = t_init

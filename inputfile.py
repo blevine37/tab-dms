@@ -31,6 +31,8 @@ DELETE_EXCEPT = []                      # Except this list (e.g., ['tc.out','nor
 
 PASS_HF_GUESS = True                    # Use previous HF orbitals as guess if available
 
+#TAB_SEED = 12345                       # Custom initial random seed for TAB
+
 ########################################
 # TDCI TeraChem Template
 ########################################
