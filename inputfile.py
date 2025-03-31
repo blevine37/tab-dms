@@ -17,7 +17,7 @@ TIMESTEP_AU = 4.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attoseco
 DURATION = 1000 # Time to simulate in femtoseconds
 
 
-WIGNER_PERTURB = True   # Perturb the initial position and velocity based on Wigner distribution
+WIGNER_PERTURB = False   # Perturb the initial position and velocity based on Wigner distribution
 WIGNER_TEMP = 0.0       # Temperature for Wigner distribution
 import random
 WIGNER_SEED = random.randint(0, 2**32-1)     # Random seed for Wigner distribution sampling
@@ -37,7 +37,7 @@ PASS_HF_GUESS = True                    # Use previous HF orbitals as guess if a
 # TDCI TeraChem Template
 ########################################
 
-TIMESTEP_E_AS = 0.10           # Electronic timestep in attoseconds
+TIMESTEP_E_AS = 1.00           # Electronic timestep in attoseconds
 nfields = 1              # number of distinct fields (generally for multichromatic floquet)
 krylov_end = False       # Generate approximate eigenstates at end of calculation?
 krylov_end_n = 5         # Number of steps to save wfn on to generate approx eigenstates with.
@@ -50,6 +50,7 @@ TDCI_TEMPLATE = {
   "convthre"             : "5.0e-10",
   "dciconvtol"           : "6.0e-13",
   "cphftol"              : "1.0e-10",
+  "xtol"                 : "1.0e-8",
   #"basis"                : "6-311++g[2d,2p]",
   #"basis"                : "sto-3g",
   "basis"                : "3-21g",
@@ -145,7 +146,6 @@ def f0_values(t):
 #   make sure you include temppath and tempname in your job template!
 #   those keywords are search and replaced
 job_template_contents = "#!/bin/bash\n\
-source /home/adurden/.bashrc\n\
 cd temppath\n\
 "+TERACHEM+"terachem tempname.in > tempname.out\n"
 
