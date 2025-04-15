@@ -195,6 +195,7 @@ class TAB(ehrenfest.Ehrenfest):
           #After collapse calculation
           gradout = self.tc.grad(x*bohrtoangs,ReCn,ImCn,DoGradStates=False)
           gradout["forces"]=gradout_mid["forces"]
+          grad_select3 = grad_select2
         
         ##-----------Resclaing the Momentum to conseve total energy)----------#
         newpote = gradout["eng"]
