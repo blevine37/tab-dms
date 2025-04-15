@@ -737,6 +737,8 @@ class job:
     states = read_bin_array(self.dir+"States_Cn.bin", nstates*self.ndets)
     states.resize((nstates, self.ndets))
 
+    state_enes = read_bin_array(self.dir+"States_E.bin", nstates)
+
     if os.path.exists(self.dir+"tdci_grad_init.bin"):
       grad_init = read_bin_array(self.dir+"tdci_grad_init.bin", 3*self.Natoms)
       logprint("rms(grad_t=start_frame) : "+str(rms(grad_init)))
@@ -783,6 +785,7 @@ class job:
                "imcn": imcn,  # 1d array, number of determinants
                "eng": eng,    # float, Energy of current wfn
                "states" : states, #CI vectors of states 
+               "state_enes"    : state_enes, #Potential energies of states
                #"grad": grad,    # 2d array, Natoms x 3 dimensions.   # We dont actually need grad at the end, right?
                #"grad_half": grad_half,    # 2d array, Natoms x 3 dimensions.
                "recn_krylov": recn_krylov,      # 1d array, 2*krylov_sub_n

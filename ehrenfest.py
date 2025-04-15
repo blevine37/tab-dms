@@ -94,6 +94,7 @@ class Ehrenfest:
     else:
       data.update({ 
                     'pe'        : TCdata['eng'],
+                    'state_enes' : TCdata['state_enes'],
 		    'recn_half' : TCdata['recn'],
 	            'imcn_half' : TCdata['imcn'],
 	            'tdci_dir' : TCdata['tdci_dir'],
