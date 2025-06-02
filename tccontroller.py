@@ -77,7 +77,7 @@ def xyz_read(filename):
 # before writing them as a file
 def dictkey(key):
   keylist = ["gpus", "timings", "precision", "threall", "convthre", "basis", 
-             "coordinates", "method", "run", "to", "charge", "spinmult", "guess", "csf_basis",
+             "coordinates", "method", "run", "to", "charge", "spinmult", "guess", "fon_guess", "csf_basis",
              "tdci_simulation_time", "tdci_nstep", "tdci_eshift", "tdci_stepprint",
              "tdci_nfields", "tdci_laser_freq", "tdci_photoneng", "tdci_fstrength",
              "tdci_fdirection", "tdci_ftype", "tdci_corrfn_t", "tdci_write_field",
@@ -312,6 +312,10 @@ class job:
         shutil.copy(pscrdir+"/c0", self.dir+"/prevc0")
         search_replace_file(self.dir+tempname, "guess generate", "guess ./prevc0")
         print("Copying HF orbital guess from: ",pscrdir+"c0")
+        if str(self.scan_infile(["fon"], 1)) == "yes":
+          shutil.copy(pscrdir+"/fon0", self.dir+"/prevfon0")
+          search_replace_file(self.dir+tempname, "guess ./prevc0", "guess ./prevc0\\nfon_guess ./prevfon0")
+          print("Copying FON guess from: ",pscrdir+"fon0")
       except:
         print("HF orbital guess not found:",pscrdir+"c0")
 
