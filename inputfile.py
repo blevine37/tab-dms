@@ -1,5 +1,6 @@
 
 TAB = 0 # Ehrenfest = 0, TAB = 1
+TABdecay = "exp" #exp for exponential (default), gauss for Gaussian
 
 JOBDIR = "./"
 xyzpath = "benzene_perturbed.xyz"

@@ -554,6 +554,12 @@ class ConfigHandler:
     self.job_template_contents = config.job_template_contents
     self.JOB_TEMPLATE = config.job_template_contents
     self.f0_values = config.f0_values
+
+    self.TABdecay = "exp"
+    try: self.TABdecay = config.TABdecay
+    except: pass
+    if self.TABdecay not in ("exp", "gauss"):
+      raise ValueError("Invalid TABdecay: {}. Must be 'exp' or 'gauss'.".format(self.TABdecay))
     
     self.USEC0FILE = False #Initial WF 
     try: self.USEC0FILE = config.USEC0FILE

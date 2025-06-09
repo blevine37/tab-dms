@@ -83,6 +83,7 @@ class TAB(ehrenfest.Ehrenfest):
       dtw = 0.10 #discrete time step for integrating over simulation history
       zpop = 1.0e-6
       dgscale = 1.0e+5
+      tabdecay = self.tc.config.TABdecay  #exp or gauss
      
       #States populated after diabatization, if pop>zpop calculate forces
       states = TCdata["states"]
@@ -149,7 +150,7 @@ class TAB(ehrenfest.Ehrenfest):
       odotrho = (newpop - oldpop)/deltatn  #derivative of rho
        
       ###---Collapsing-------###########################
-      npop, track = self.gcollapse(dimH,deltatn,aforces,newpop,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale)
+      npop, track = self.gcollapse(dimH,deltatn,aforces,newpop,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale,tabdecay)
       self.logprint("Population after collapsing is "+str(npop))
       if (track == 0):
         self.logprint("No collapsing at "+str(it)+" time step")
@@ -226,7 +227,7 @@ class TAB(ehrenfest.Ehrenfest):
     import datetime
     realtime = str( datetime.timedelta( seconds=(time.time() - realtime_start) ))
     self.logprint("Simulated "+str(time_simulated)+" fs with "+str(it)+" steps in "+realtime+" Real time.")
-  def gcollapse(self,dimH,deltatn,aforces,poparray,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale):
+  def gcollapse(self,dimH,deltatn,aforces,poparray,dcps,nzthresh,errortol,npthresh,pehrptol,odotrho,tolodotrho,nta,dtw,zpop,dgscale,tabdecay):
         
         import sys
         from scipy.optimize import lsq_linear
@@ -259,12 +260,12 @@ class TAB(ehrenfest.Ehrenfest):
         self.logprint("invtau is "+str(invtau))
 
 	# computing the weight function
+	if tabdecay == "gauss":
+	  w = np.zeros((dimH,nta+1))
+	  zpoptime = np.zeros((dimH))
 
-	w = np.zeros((dimH,nta+1))
-	zpoptime = np.zeros((dimH))
-
-	i = 0
-	while i < dimH:
+	  i = 0
+	  while i < dimH:
 		if (odotrho[i] >= tolodotrho):
 			zpoptime[i] = poparray[i]/odotrho[i]
 			k = 0
@@ -286,7 +287,6 @@ class TAB(ehrenfest.Ehrenfest):
 				w[i][-1] = (poparray[i] - sum)/poparray[i]
 			pass
 		i = i + 1
-	pass				
 
 #	Not super efficient, could put sooner, but here is the rank reduction 
 #	to working with only populated electronic states -> add a tolerance to pass
@@ -320,7 +320,8 @@ class TAB(ehrenfest.Ehrenfest):
 
 	vtarget = []
 	i = 0
-	while i < rank:
+	if tabdecay == "gauss":
+	  while i < rank:
 	        j = i
 	        while j < rank:
 # lots of logic in order to determine how integration will work based on current rules
@@ -385,7 +386,23 @@ class TAB(ehrenfest.Ehrenfest):
 	                j = j + 1
 	        pass
 	        i = i + 1
-	pass
+	elif tabdecay == "exp":
+	  while i < rank:
+	        j = i
+	        while j < rank:
+			  if (i == j):
+				velem = dgscale*poparray[vstates[i]]
+				eseg[i][i] = 1.0
+			  else:
+				velem = ((poparray[vstates[i]]*poparray[vstates[j]])**(0.5))*math.exp(-1.0*deltatn*invtau[vstates[i]][vstates[j]])
+				eseg[i][j] = math.exp(-1.0*deltatn*invtau[i][j]) 
+				eseg[j][i] = eseg[i][j]
+			  pass
+			  vtarget.append(velem)
+			  j = j + 1
+	        pass
+	        i = i + 1
+
 
 #	print 'vtarget'
 #	print vtarget

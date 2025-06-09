@@ -63,6 +63,10 @@ elif config.TAB == 1:
     logprint("Propagation scheme: TAB")
   else:
     logprint("Propagation scheme: TAB-DMS")
+  if not hasattr(config, 'TABdecay') or config.TABdecay == "exp":
+    logprint("Decay method: exponential")
+  if config.TABdecay == "gauss":
+    logprint("Decay method: Gaussian")
 else:
   print("ERROR: Choose valid propagation scheme!")
   sys.exit()
