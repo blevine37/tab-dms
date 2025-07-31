@@ -395,7 +395,7 @@ class TAB(ehrenfest.Ehrenfest):
 				eseg[i][i] = 1.0
 			  else:
 				velem = ((poparray[vstates[i]]*poparray[vstates[j]])**(0.5))*math.exp(-1.0*deltatn*invtau[vstates[i]][vstates[j]])
-				eseg[i][j] = math.exp(-1.0*deltatn*invtau[i][j]) 
+				eseg[i][j] = math.exp(-1.0*deltatn*invtau[vstates[i]][vstates[j]]) 
 				eseg[j][i] = eseg[i][j]
 			  pass
 			  vtarget.append(velem)
