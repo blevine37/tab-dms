@@ -131,7 +131,7 @@ class Ehrenfest:
         self.logprint("Random seed (from inputfile): "+str(tabseed))
       else: #Default to unix time
         import time
-        tabseed = int(time.time())
+        tabseed = int(time.time()*1000000)
         random.seed(tabseed)
         self.logprint("Random seed (generated): "+str(tabseed))
       self.logprint("")
