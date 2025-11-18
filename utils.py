@@ -614,6 +614,10 @@ class ConfigHandler:
     try: self.PASS_HF_GUESS = config.PASS_HF_GUESS
     except: pass
 
+    self.ESHIFT_CONSTANT = False
+    try: self.ESHIFT_CONSTANT = config.ESHIFT_CONSTANT
+    except: pass
+
     self.TAB_SEED = False
     try: self.TAB_SEED = int(config.TAB_SEED)
     except: pass

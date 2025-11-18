@@ -5,6 +5,7 @@ from __future__ import print_function
 import numpy as np
 import struct, shutil, os, sys, subprocess, time, mmap
 import copy
+import h5py
 
 
 # Constants
@@ -302,6 +303,14 @@ class job:
     #tempname = "test"+str(self.n)+".in"
     tempname = "tc.in"
     dict_to_file(TDCI_TEMPLATE, self.dir+"/"+tempname)
+
+    # Handle constant energy shift if enabled
+    if self.config.ESHIFT_CONSTANT and self.n > 0:
+      if not hasattr(self.config, 'eshift_cache'): #Load the shift energy from the first step
+        with h5py.File(self.JOBDIR + "data.hdf5", "r") as f:
+          self.config.eshift_cache = f["state_enes"][0, 0]
+      search_replace_file(self.dir+tempname, "tdci_eshift.*", "tdci_eshift {}".format(self.config.eshift_cache))
+      print("Step {}: Using constant tdci_eshift = {}".format(self.n, self.config.eshift_cache))
 
     if self.config.PASS_HF_GUESS and self.n > 0:
       xyzname = "temp"
@@ -907,6 +916,7 @@ class tccontroller:
     #  self.restart()
     self.DELETE_STEPFILES = config.DELETE_STEPFILES
     self.TAB_SEED = config.TAB_SEED
+    self.eshift_cache = None
 
   # Prepare for restarting the dynamics simulation partway through
   #   Need to populate self.prevjob so orbital diabatization takes place
