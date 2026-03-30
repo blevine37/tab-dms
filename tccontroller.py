@@ -672,7 +672,7 @@ class job:
     #read forces
     forces=[]
     if str(self.scan_infile(["tdci_grad_states"], 1)) == "yes":  #gradient calulcation 
-      if self.scan_infile(["tdci_grad_states_select"], 1):   #gradient of selected states only
+      if False: #self.scan_infile(["tdci_grad_states_select"], 1):   #gradient of selected states only
         gradstates = [int(string) for string in str(self.scan_outfile(["tdci_grad_states_select"], 1)).split(',')]
         logprint("Grad on states: "+str(gradstates))
         for i in range(nstates):

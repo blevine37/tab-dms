@@ -10,7 +10,6 @@ initial_electronic_state = 0  # S0 = 0, S1 = 1, etc.
 RESTART = False
 restart_frame = True  # True automatically detects last valid step
 restart_hdf5 = "restart.hdf5"
-TERACHEM = "/home/adurden/terachem/build/bin/" # directory containing terachem executable
 
 
 TIMESTEP_AU = 4.0 # Nuclear timestep in Atomic Time units. 1 au_t ~= 24 attoseconds
@@ -148,21 +147,14 @@ def f0_values(t):
 # Job Template: Used to make a shell script that executes terachem 
 #   make sure you include temppath and tempname in your job template!
 #   those keywords are search and replaced
-job_template_contents = "#!/bin/bash\n\
-cd temppath\n\
-"+TERACHEM+"terachem tempname.in > tempname.out\n"
+import os
+import sys
 
+main_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
+lvc_interface = os.path.join(main_dir, 'lvc_interface.py')
 
-
-
-
-
-
-
-
-
-
-
-
-
+job_template_contents = """#!/bin/bash
+cd temppath
+python3 "{0}"
+""".format(lvc_interface)
 

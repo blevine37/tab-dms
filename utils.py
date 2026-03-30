@@ -544,7 +544,6 @@ class ConfigHandler:
       else:
         self.restart_frame = config.restart_frame
     self.SCHEDULER = config.SCHEDULER
-    self.TERACHEM = config.TERACHEM
     self.TIMESTEP_AU = config.TIMESTEP_AU # Dynamics time step in atomic units
     self.nfields = config.nfields
     self.krylov_end = config.krylov_end
